@@ -6,6 +6,12 @@ Documentation and code examples for the RC800 (RC8xx) CPU architecture.
 
 This repository is **largely AI-generated**. The documentation and examples were produced by an AI assistant using the RC800 architecture specification as input. While care has been taken to verify correctness against the native instruction table and architecture rules, **review all content critically** before relying on it. If you find errors, please report them.
 
+## 🤖 For LLMs
+
+**[`REFERENCE.md`](REFERENCE.md)** is the single authoritative source for the RC800 ISA. It is written as a comprehensive prompt so an LLM can learn the architecture in one read — covering registers, calling convention, assembler syntax, the full native instruction table, synthesized instructions, and coding idioms. It also serves as a good introduction and tutorial for human developers.
+
+Feed `REFERENCE.md` to your context window, then consult the [`examples/`](examples/) directory for concrete implementations of common patterns.
+
 ## What Is This?
 
 The RC800 is a hypothetical 8-bit CPU architecture exploring what a mid-to-late 1980s CPU might look like if FWIW (Fixed Width Instruction Word) and RISC techniques had been applied. It features:
@@ -19,7 +25,7 @@ The RC800 is a hypothetical 8-bit CPU architecture exploring what a mid-to-late 
 
 | File | Description |
 |------|-------------|
-| [`REFERENCE.md`](REFERENCE.md) | **Single authoritative source** for the ISA. Covers registers, calling convention, assembler syntax, native instruction table, synthesized instructions, and coding idioms. |
+| [`REFERENCE.md`](REFERENCE.md) | **Single authoritative source** for the ISA. See [For LLMs](#-for-llms) above. |
 | [`SUGGESTIONS.md`](SUGGESTIONS.md) | Recommended algorithms to implement on the RC800 platform, organized by difficulty tier. |
 | [`AGENTS.md`](AGENTS.md) | Instructions for AI assistants working in this repository. |
 
