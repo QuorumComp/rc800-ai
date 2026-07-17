@@ -50,8 +50,8 @@ The [`examples/`](examples/) directory contains concrete, fully-commented code i
 
 ## Related
 
-The RC800 RTL implementation lives in the [`hc800`](https://github.com/QuorumComp/hc800) repository. Architecture documentation for the RTL is in `rtl/rc800/docs/`.
+The RC800 RTL implementation lives in the [`rc800`](https://github.com/QuorumComp/rc800) repository. Architecture documentation for the RTL is in `docs/`.
 
 ## License
 
-See the `hc800` repository for licensing information.
+MIT License. See [LICENSE](LICENSE).
