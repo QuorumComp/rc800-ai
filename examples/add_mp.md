@@ -17,7 +17,7 @@ using 16-bit `ADD FT` to propagate the carry through F.
 | F | Carry lane / stash | High byte of FT holds the byte being accumulated or the carry-out |
 | T | Accumulator low byte | Holds the sum byte that is stored back to the destination |
 
-Because `jal` stores the return address in HL, the function must save HL before
+Because `JAL` stores the return address in HL, the function must save HL before
 using H and L as loop counter and carry. The return address is pushed onto the
 HL stack and restored at the end.
 

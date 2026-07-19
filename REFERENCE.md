@@ -56,20 +56,20 @@ A few common operations break this rule: `ADD R8, i8`, `CMP R8, i8`, and `LD R8,
 
 | Category | Example | Effect |
 |----------|---------|--------|
-| Arithmetic | `add t,b` / `sub t,5` | T = result |
-| Bitwise | `and t,b` / `or t,$ff` | T = result |
-| Comparison | `cmp t,b` | F = flags (T unchanged) |
-| Load | `ld t,(bc)` / `ld t,42` | T = value |
-| Store | `ld (bc),t` | memory = T |
+| Arithmetic | `ADD T,B` / `SUB T,5` | T = result |
+| Bitwise | `AND T,B` / `OR T,$FF` | T = result |
+| Comparison | `CMP T,B` | F = flags (T unchanged) |
+| Load | `LD T,(BC)` / `LD T,42` | T = value |
+| Store | `LD (BC),T` | memory = T |
 
 **16-bit operations** — operate on FT or use FT as a pointer:
 
 | Category | Example | Effect |
 |----------|---------|--------|
-| Arithmetic | `add ft,bc` / `add de,1` | result in left operand |
-| Load | `ld ft,bc` / `ld ft,$1234` | FT = value |
-| Pointer math | `add ft,bc` / `add bc,1` | FT/BC = new address |
-| Memory via FT | `ld t,(ft)` / `ld (ft),t` | T ↔ memory[FT] |
+| Arithmetic | `ADD FT,BC` / `ADD DE,1` | result in left operand |
+| Load | `LD FT,BC` / `LD FT,$1234` | FT = value |
+| Pointer math | `ADD FT,BC` / `ADD BC,1` | FT/BC = new address |
+| Memory via FT | `LD T,(FT)` / `LD (FT),T` | T ↔ memory[FT] |
 
 **Flags:** Only `CMP` and `TST` set the F register. Arithmetic, bitwise, load, store, and move instructions do not update flags. There is no implicit flag setting on this architecture.
 
@@ -77,11 +77,11 @@ A few common operations break this rule: `ADD R8, i8`, `CMP R8, i8`, and `LD R8,
 
 | Instruction | Effect |
 |-------------|--------|
-| `j label` | Unconditional jump |
-| `j/cc label` | Conditional jump (10 conditions) |
-| `dj r8,label` | Decrement and jump if non-zero |
-| `jal label` | Call; return address stored in HL |
-| `j (hl)` | Return; jump to address in HL |
+| `J label` | Unconditional jump |
+| `J/CC label` | Conditional jump (10 conditions) |
+| `DJ R8,label` | Decrement and jump if non-zero |
+| `JAL label` | Call; return address stored in HL |
+| `J (HL)` | Return; jump to address in HL |
 
 ### Using Registers as Pointers
 
@@ -146,9 +146,9 @@ main:
 
 ### Register List Syntax
 
-- **Range syntax** (`-`): `push bc-hl` pushes bc, de, hl (expands to `pusha` / `pop ft`). `pop bc-hl` pops them (expands to `popa` / `push ft`).
-- **List syntax** (`/`): `push bc/de` pushes only bc and de individually (two `push` instructions). `pop bc/de` pops them in reverse order.
-- Any combination is accepted: `push ft/hl`, `push bc-de`, etc.
+- **Range syntax** (`-`): `PUSH BC-HL` pushes BC, DE, HL (expands to `PUSHA` / `POP FT`). `POP BC-HL` pops them (expands to `POPA` / `PUSH FT`).
+- **List syntax** (`/`): `PUSH BC/DE` pushes only BC and DE individually (two `PUSH` instructions). `POP BC/DE` pops them in reverse order.
+- Any combination is accepted: `PUSH FT/HL`, `PUSH BC-DE`, etc.
 
 ### Addressing Forms
 
@@ -260,12 +260,12 @@ The F register is fully writable, not just set by the ALU. This enables several 
 
   | Slot | Condition | FLAGS value |
   |------|-----------|-------------|
-  | 1 | `j/eq` (Z=1) | `$02` `FLAGS_EQ` |
-  | 2 | `j/ltu` (C=1, Z=0) | `$01` `FLAGS_LTU` |
-  | 3 | `j/lt` (N⊕V=1, Z=0, C=0) | `$04` `FLAGS_NEGATIVE` (V=0) |
+  | 1 | `J/EQ` (Z=1) | `$02` `FLAGS_EQ` |
+  | 2 | `J/LTU` (C=1, Z=0) | `$01` `FLAGS_LTU` |
+  | 3 | `J/LT` (N⊕V=1, Z=0, C=0) | `$04` `FLAGS_NEGATIVE` (V=0) |
   | 4 | fallthrough | `$00` `FLAGS_NE` |
 
-  Order the chain most-specific-first: a multi-bit FLAGS value satisfies several conditions (e.g. `$03` takes both `j/eq` and `j/ltu`), so the first matching condition must be the most exclusive. `$08` (`FLAGS_OVERFLOW`) is not a new distinguishable slot — it sets N⊕V=1 just like `$04`, so it collides under `j/lt`. Going beyond four categories requires the composite `J/CC` conditions (`j/le`, `j/leu`, `j/gt`, `j/gtu`, `j/ge`, `j/ne`), at the cost of fragile bit budgeting, or a 16-bit jump table in code space.
+  Order the chain most-specific-first: a multi-bit FLAGS value satisfies several conditions (e.g. `$03` takes both `J/EQ` and `J/LTU`), so the first matching condition must be the most exclusive. `$08` (`FLAGS_OVERFLOW`) is not a new distinguishable slot — it sets N⊕V=1 just like `$04`, so it collides under `J/LT`. Going beyond four categories requires the composite `J/CC` conditions (`J/LE`, `J/LEU`, `J/GT`, `J/GTU`, `J/GE`, `J/NE`), at the cost of fragile bit budgeting, or a 16-bit jump table in code space.
 
 **Note**: F is primarily a flags register. Although it can be used as a normal register, its contents are overwritten by `CMP` and `TST`, so any value stored in F is only reliably available for the brief window between writes and the next comparison. In practice, F-as-data is most useful inside tight loops where no comparison occurs between the value being produced and consumed.
 
@@ -370,7 +370,7 @@ Separating **Writes** (actual byte modifications) from **Clobbers** (parent-pair
 
 | Instruction | Reads | Writes | Clobbers |
 |---|---|---|---|
-| `ld t,(bc)` | `B/C - BC` | T | FT |
+| `LD T,(BC)` | `B/C - BC` | T | FT |
 
 **Reading this row:**
 - `Reads B/C - BC`: the instruction reads `B` and `C` (the pointer), and therefore the parent pair `BC`.
@@ -381,7 +381,7 @@ Another non-obvious example:
 
 | Instruction | Reads | Writes | Clobbers |
 |---|---|---|---|
-| `cmp b,i8` | `B - BC` | F | FT |
+| `CMP B,I8` | `B - BC` | F | FT |
 
 **Reading this row:**
 - `Reads B - BC`: the instruction reads `B` and its parent pair `BC`.
@@ -392,13 +392,13 @@ Another non-obvious example:
 
 | Instruction | Writes | Clobbers |
 |---|---|---|
-| `cmp t,r8` | `F` | `FT` |
-| `cmp r8,i8` | `F` | `FT` |
-| `tst r16` | `F` | `FT` |
-| `ld t,(r16)` | `T` | `FT` |
-| `ld r8,(ft)` | `r8` | parent pair of `r8` |
-| `add r8,i8` | `r8` | parent pair of `r8` |
-| `ld f,i8` | `F` | `FT` |
+| `CMP T,R8` | `F` | `FT` |
+| `CMP R8,I8` | `F` | `FT` |
+| `TST R16` | `F` | `FT` |
+| `LD T,(R16)` | `T` | `FT` |
+| `LD R8,(FT)` | `R8` | parent pair of `R8` |
+| `ADD R8,I8` | `R8` | parent pair of `R8` |
+| `LD F,I8` | `F` | `FT` |
 
 This is the most common source of bugs on the RC800 architecture. When mixing 8-bit and 16-bit operations, trace the containing pair of every 8-bit register to verify no live 16-bit value is silently clobbered.
 
@@ -415,7 +415,7 @@ This is the most common source of bugs on the RC800 architecture. When mixing 8-
 
 Because the `Clobbers` column reports parent-pair validity loss — not byte modification (see the [Clobbers column note](#how-to-read-the-native-instruction-table) above) — the flag byte `F` is preserved by any instruction whose **Writes** column lists only `T`, and `T` is preserved by any instruction whose **Writes** column lists only `F`.
 
-Practical consequence: after `cmp t,i8`, `cmp r8,i8`, or `tst r16` sets flags in `F`, a following instruction that writes only `T` — such as `add t,i8`, `sub t,i8`, `ld t,r8`, or `ld t,(r16)` — leaves those flags intact. An immediately subsequent conditional instruction (`INST/CC`, `J/CC`) therefore reads the original comparison flags, not a stale or destroyed copy.
+Practical consequence: after `CMP T,I8`, `CMP R8,I8`, or `TST R16` sets flags in `F`, a following instruction that writes only `T` — such as `ADD T,I8`, `SUB T,I8`, `LD T,R8`, or `LD T,(R16)` — leaves those flags intact. An immediately subsequent conditional instruction (`INST/CC`, `J/CC`) therefore reads the original comparison flags, not a stale or destroyed copy.
 
 ```
         cmp     t,1             ; F <- Flags[T - 1]
@@ -424,9 +424,9 @@ Practical consequence: after `cmp t,i8`, `cmp r8,i8`, or `tst r16` sets flags in
         add     t,4             ; executes only on the EQ path
 ```
 
-Without the `T`-write-only property of `add t,i8`, computing a value from `T` between a `cmp` and the conditional that consumes its flags would require a separate register to hold the comparison result. The [`nibble_to_hex`](examples/nibble_to_hex.md) example relies on this idiom to convert a 4-bit value to ASCII in a single pass.
+Without the `T`-write-only property of `ADD T,I8`, computing a value from `T` between a `CMP` and the conditional that consumes its flags would require a separate register to hold the comparison result. The [`nibble_to_hex`](examples/nibble_to_hex.md) example relies on this idiom to convert a 4-bit value to ASCII in a single pass.
 
-**Caveat:** the inverse does not hold — an instruction that writes `F` (e.g., another `cmp`, `tst`, or `ld f,i8`) destroys the flags even if `T` survives. Re-derive flag liveness from the table whenever a new instruction is inserted between the `cmp` and the conditional consumer.
+**Caveat:** the inverse does not hold — an instruction that writes `F` (e.g., another `CMP`, `TST`, or `LD F,I8`) destroys the flags even if `T` survives. Re-derive flag liveness from the table whenever a new instruction is inserted between the `CMP` and the conditional consumer.
 
 #### How to check synthesized instructions
 
@@ -480,7 +480,7 @@ Advancing the SP (discarding entries) is safe with interrupts enabled — an int
 
 See [`examples/lcr_stack_pointer.md`](examples/lcr_stack_pointer.md) for worked examples of LCR-based SP manipulation (discard, rewind, empty, depth query).
 
-**Unique architecture feature:** Because each register pair has its own independent stack, there is no shared memory stack. This means you do not need to push and pop register pairs in a specific order — `push bc; push de; pop bc; pop de` is perfectly valid, unlike architectures with a single shared stack where LIFO order is mandatory.
+**Unique architecture feature:** Because each register pair has its own independent stack, there is no shared memory stack. This means you do not need to push and pop register pairs in a specific order — `PUSH BC; PUSH DE; POP BC; POP DE` is perfectly valid, unlike architectures with a single shared stack where LIFO order is mandatory.
 
 #### Register-Stack Architecture
 
@@ -527,9 +527,9 @@ This model applies to all four register stacks (FT, BC, DE, HL). Each register i
 
 **Common Mistakes:**
 
-- **`push ft` followed by `swap ft` is a no-op.** After `PUSH FT`, both FT and `Stack[SP+1]` contain the same value. Swapping them exchanges identical values, leaving the stack unchanged. This pattern cannot be used to copy or duplicate elements.
+- **`PUSH FT` followed by `SWAP FT` is a no-op.** After `PUSH FT`, both FT and `Stack[SP+1]` contain the same value. Swapping them exchanges identical values, leaving the stack unchanged. This pattern cannot be used to copy or duplicate elements.
 
-- **`push ft` duplicates, it does not "push the register."** The instruction creates a copy of the current TOS on the stack below. It does not move FT to a new stack position while leaving the old position empty. After push, FT and `Stack[SP+1]` are identical.
+- **`PUSH FT` duplicates, it does not "push the register."** The instruction creates a copy of the current TOS on the stack below. It does not move FT to a new stack position while leaving the old position empty. After push, FT and `Stack[SP+1]` are identical.
 
 #### Using the FT Stack for RPN Calculations
 
@@ -547,12 +547,12 @@ This model maps naturally to RPN calculators and stack-based languages. Common s
 
 | Operation | Stack effect | RC800 instruction | Meaning |
 |---|---|---|---|
-| dup | `( a -- a a )` | `push ft` | Duplicate TOS |
-| drop | `( a -- )` | `pop ft` | Drop TOS, load next |
-| swap | `( a b -- b a )` | `swap ft` | Exchange TOS with 2nd |
-| over | `( a b -- a b a )` | `push ft` / `swap ft` | Copy 2nd to TOS |
+| dup | `( a -- a a )` | `PUSH FT` | Duplicate TOS |
+| drop | `( a -- )` | `POP FT` | Drop TOS, load next |
+| swap | `( a b -- b a )` | `SWAP FT` | Exchange TOS with 2nd |
+| over | `( a b -- a b a )` | `PUSH FT` / `SWAP FT` | Copy 2nd to TOS |
 
-**Pushing a value** follows a two-step pattern. The first value is loaded directly into FT (FT becomes TOS). Each subsequent value requires `push ft` first to save the current TOS, then `ld ft,value` to load the new TOS:
+**Pushing a value** follows a two-step pattern. The first value is loaded directly into FT (FT becomes TOS). Each subsequent value requires `PUSH FT` first to save the current TOS, then `LD FT,value` to load the new TOS:
 
 ```
         ld      ft,3         ; FT=3, stack: [3]        (first value, just load)
@@ -562,7 +562,7 @@ This model maps naturally to RPN calculators and stack-based languages. Common s
         ld      ft,5         ; FT=5, stack: [3, 4, 5]  (third value)
 ```
 
-**Binary operations** `( a b -- result )` consume two stack entries and produce one. The stack depth decreases by 1. The pattern is: save TOS to a scratch register, pop to get the second operand, and operate. The result lands in FT which is already TOS — **no `push ft` needed**:
+**Binary operations** `( a b -- result )` consume two stack entries and produce one. The stack depth decreases by 1. The pattern is: save TOS to a scratch register, pop to get the second operand, and operate. The result lands in FT which is already TOS — **no `PUSH FT` needed**:
 
 ```
         ; Stack: [a, b]  (FT = b, Stack[SP+1] = a)
@@ -584,9 +584,9 @@ This model maps naturally to RPN calculators and stack-based languages. Common s
 |---|---|---|
 | Binary op (add, sub, mul, ...) | -1 | `( a b -- a+b )` |
 | Unary op (neg, abs, invert) | 0 | `( a -- -a )` |
-| `push ft` (dup) | +1 | `( a -- a a )` |
-| `pop ft` (drop) | -1 | `( a -- )` |
-| `swap ft` | 0 | `( a b -- b a )` |
+| `PUSH FT` (dup) | +1 | `( a -- a a )` |
+| `POP FT` (drop) | -1 | `( a -- )` |
+| `SWAP FT` | 0 | `( a b -- b a )` |
 
 This RPN approach is useful whenever register pressure is high — for example, in expression evaluators, interpreters, or complex mathematical calculations. The FT stack provides 256 entries of temporary storage without consuming any registers.
 
@@ -722,7 +722,7 @@ These are not jump vectors — the CPU sets PC directly to the address, and the 
 
 ### Parameter Passing
 
-Parameters are assigned left to right. The first parameters use registers from the sequence **T, B, C, D, E** (8-bit) or **FT, BC, DE** (16-bit). When the register sequence is exhausted, remaining parameters spill onto the HL stack. `HL` is never used for register parameters because `jal` overwrites it with the return address.
+Parameters are assigned left to right. The first parameters use registers from the sequence **T, B, C, D, E** (8-bit) or **FT, BC, DE** (16-bit). When the register sequence is exhausted, remaining parameters spill onto the HL stack. `HL` is never used for register parameters because `JAL` overwrites it with the return address.
 
 - **8-bit param** — occupies one register from the sequence, or one 16-bit word on the HL stack (value in low byte, high byte sign- or zero-extended per declared type)
 - **16-bit param** — occupies FT, BC, or DE in order, or one 16-bit word on the HL stack
@@ -752,7 +752,7 @@ Parameters that do not fit in registers are passed on the HL stack. Each paramet
 **Caller responsibilities:**
 
 1. Push stack parameters onto the HL stack in declaration order (first stack param pushed first).
-2. Push a sacrificial slot after the last parameter — `jal` overwrites the HL stack top with the return address.
+2. Push a sacrificial slot after the last parameter — `JAL` overwrites the HL stack top with the return address.
 3. Load register parameters into their assigned registers.
 
 ```
@@ -774,7 +774,7 @@ Parameters that do not fit in registers are passed on the HL stack. Each paramet
         jal     f
 ```
 
-**Stack layout after `jal`:**
+**Stack layout after `JAL`:**
 
 ```
   HL (index 0, SP)   = return address
@@ -931,10 +931,10 @@ f:
 
 - **Callee-saves**: BC, DE (including stack values).
 - **Caller-saves**: FT (always assumed destroyed by callee).
-- **HL**: holds the return address set by `jal`. Management depends on the function type:
-  - **No stack parameters**: standard `push bc/de/hl` / `pop hl/de/bc`
-  - **Swap-pop variant**: prologue pushes only `bc/de` (not HL). Params are consumed via `swap hl` / `pop hl`, which naturally preserves HL=ret between each pair. Epilogue `pop hl` discards the sacrificial slot.
-  - **PICK variant**: prologue `push hl` duplicates ret (shifting params to higher indices). Epilogue discards all remaining HL stack entries (ret dup, ret, and all params) via individual `pop hl` or `LCR` advance.
+- **HL**: holds the return address set by `JAL`. Management depends on the function type:
+  - **No stack parameters**: standard `PUSH BC/DE/HL` / `POP HL/DE/BC`
+  - **Swap-pop variant**: prologue pushes only `BC/DE` (not HL). Params are consumed via `SWAP HL` / `POP HL`, which naturally preserves HL=ret between each pair. Epilogue `POP HL` discards the sacrificial slot.
+  - **PICK variant**: prologue `PUSH HL` duplicates ret (shifting params to higher indices). Epilogue discards all remaining HL stack entries (ret dup, ret, and all params) via individual `POP HL` or `LCR` advance.
 
 ### Subroutines
 
@@ -944,14 +944,14 @@ f:
 
 ### Prologue/Epilogue Optimization
 
-Use register-list `push`/`pop` forms in function prologues and epilogues (`push bc/de/hl`, `pop hl/de/bc`, etc.). The assembler can choose compact synthesized sequences automatically.
+Use register-list `PUSH`/`POP` forms in function prologues and epilogues (`PUSH BC/DE/HL`, `POP HL/DE/BC`, etc.). The assembler can choose compact synthesized sequences automatically.
 
-- `pusha`/`popa` execute in the same time as a single-register `push`/`pop`.
-- For procedures that do not return a value in FT, `pusha`/`popa` is usually the fastest full-save prologue/epilogue.
-- Any save set can be expressed in at most two instructions: either individual pushes/pops (for 1-2 registers), or `pusha`/`popa` plus one compensating `pop`/`push` (for 3 registers).
+- `PUSHA`/`POPA` execute in the same time as a single-register `PUSH`/`POP`.
+- For procedures that do not return a value in FT, `PUSHA`/`POPA` is usually the fastest full-save prologue/epilogue.
+- Any save set can be expressed in at most two instructions: either individual pushes/pops (for 1-2 registers), or `PUSHA`/`POPA` plus one compensating `POP`/`PUSH` (for 3 registers).
 - This is why register-list syntax is preferred: it lets the assembler pick the best encoding or expansion strategy.
 
-**Functions with stack parameters** use a different prologue/epilogue. See [Stack Parameters](#stack-parameters) for details. The key difference: HL is not part of the standard `push bc/de/hl` save set — it is managed through the HL stack. The swap-pop variant never pushes HL; it preserves ret naturally between `swap hl` / `pop hl` pairs and discards the sacrificial slot with a final `pop hl` in the epilogue. The PICK variant pushes HL in the prologue to duplicate ret (shifting params to higher indices for `PICK`), then discards all remaining entries in the epilogue.
+**Functions with stack parameters** use a different prologue/epilogue. See [Stack Parameters](#stack-parameters) for details. The key difference: HL is not part of the standard `PUSH BC/DE/HL` save set — it is managed through the HL stack. The swap-pop variant never pushes HL; it preserves ret naturally between `SWAP HL` / `POP HL` pairs and discards the sacrificial slot with a final `POP HL` in the epilogue. The PICK variant pushes HL in the prologue to duplicate ret (shifting params to higher indices for `PICK`), then discards all remaining entries in the epilogue.
 
 ### Register Allocation and Optimization
 
@@ -1554,247 +1554,247 @@ For the 16-bit/8-bit register mapping and clobber-checking rules, see [Register 
 - Left side of `-`: 8-bit registers used directly by the operation, plus child bytes of any explicit 16-bit operands.
 - Right side of `-`: 16-bit registers used directly by the operation, plus parent pairs of any explicit 8-bit operands.
 - **Writes** lists only the 8-bit registers that the instruction actually modifies.
-- **Clobbers** lists the 16-bit parent pairs of any written byte; the other byte of a clobbered pair is not changed and remains valid as an independent 8-bit value (e.g., `F` survives instructions that write only `T`, so flags set by `cmp` persist across a following `add t,i8`). See [Flags survival across T/F writes](#flags-survival-across-tf-writes) for the idiom.
+- **Clobbers** lists the 16-bit parent pairs of any written byte; the other byte of a clobbered pair is not changed and remains valid as an independent 8-bit value (e.g., `F` survives instructions that write only `T`, so flags set by `CMP` persist across a following `ADD T,I8`). See [Flags survival across T/F writes](#flags-survival-across-tf-writes) for the idiom.
 - Non-register side effects (stack state, `PC`, `IEF`) are appended after `;` in the Clobbers column.
 
 | Instruction | Reads | Writes | Clobbers |
 |---|---|---|---|
-| `add t,f` | F/T - FT | T | FT |
-| `add t,t` | T - FT | T | FT |
-| `add t,b` | T/B - FT/BC | T | FT |
-| `add t,c` | T/C - FT/BC | T | FT |
-| `add t,d` | T/D - FT/DE | T | FT |
-| `add t,e` | T/E - FT/DE | T | FT |
-| `add t,h` | T/H - FT/HL | T | FT |
-| `add t,l` | T/L - FT/HL | T | FT |
-| `add ft,ft` | F/T - FT | F/T | FT |
-| `add ft,bc` | F/T/B/C - FT/BC | F/T | FT |
-| `add ft,de` | F/T/D/E - FT/DE | F/T | FT |
-| `add ft,hl` | F/T/H/L - FT/HL | F/T | FT |
-| `add f,i8` | F - FT | F | FT |
-| `add t,i8` | T - FT | T | FT |
-| `add b,i8` | B - BC | B | BC |
-| `add c,i8` | C - BC | C | BC |
-| `add d,i8` | D - DE | D | DE |
-| `add e,i8` | E - DE | E | DE |
-| `add h,i8` | H - HL | H | HL |
-| `add l,i8` | L - HL | L | HL |
-| `add ft,s8` | F/T - FT | F/T | FT |
-| `add bc,s8` | B/C - BC | B/C | BC |
-| `add de,s8` | D/E - DE | D/E | DE |
-| `add hl,s8` | H/L - HL | H/L | HL |
-| `sub t,f` | F/T - FT | T | FT |
-| `sub t,b` | T/B - FT/BC | T | FT |
-| `sub t,c` | T/C - FT/BC | T | FT |
-| `sub t,d` | T/D - FT/DE | T | FT |
-| `sub t,e` | T/E - FT/DE | T | FT |
-| `sub t,h` | T/H - FT/HL | T | FT |
-| `sub t,l` | T/L - FT/HL | T | FT |
-| `sub ft,bc` | F/T/B/C - FT/BC | F/T | FT |
-| `sub ft,de` | F/T/D/E - FT/DE | F/T | FT |
-| `sub ft,hl` | F/T/H/L - FT/HL | F/T | FT |
-| `neg t` | T - FT | T | FT |
-| `neg ft` | F/T - FT | F/T | FT |
-| `ext` | T - FT | F | FT |
-| `and t,f` | F/T - FT | T | FT |
-| `and t,b` | T/B - FT/BC | T | FT |
-| `and t,c` | T/C - FT/BC | T | FT |
-| `and t,d` | T/D - FT/DE | T | FT |
-| `and t,e` | T/E - FT/DE | T | FT |
-| `and t,h` | T/H - FT/HL | T | FT |
-| `and t,l` | T/L - FT/HL | T | FT |
-| `and t,i8` | T - FT | T | FT |
-| `or t,f` | F/T - FT | T | FT |
-| `or t,b` | T/B - FT/BC | T | FT |
-| `or t,c` | T/C - FT/BC | T | FT |
-| `or t,d` | T/D - FT/DE | T | FT |
-| `or t,e` | T/E - FT/DE | T | FT |
-| `or t,h` | T/H - FT/HL | T | FT |
-| `or t,l` | T/L - FT/HL | T | FT |
-| `or t,i8` | T - FT | T | FT |
-| `xor t,f` | F/T - FT | T | FT |
-| `xor t,b` | T/B - FT/BC | T | FT |
-| `xor t,c` | T/C - FT/BC | T | FT |
-| `xor t,d` | T/D - FT/DE | T | FT |
-| `xor t,e` | T/E - FT/DE | T | FT |
-| `xor t,h` | T/H - FT/HL | T | FT |
-| `xor t,l` | T/L - FT/HL | T | FT |
-| `xor t,i8` | T - FT | T | FT |
-| `not f` | F - FT | F | FT |
-| `ls ft,b` | F/T/B - FT/BC | F/T | FT |
-| `ls ft,c` | F/T/C - FT/BC | F/T | FT |
-| `ls ft,d` | F/T/D - FT/DE | F/T | FT |
-| `ls ft,e` | F/T/E - FT/DE | F/T | FT |
-| `ls ft,h` | F/T/H - FT/HL | F/T | FT |
-| `ls ft,l` | F/T/L - FT/HL | F/T | FT |
-| `ls ft,i8` | F/T - FT | F/T | FT |
-| `rs ft,b` | F/T/B - FT/BC | F/T | FT |
-| `rs ft,c` | F/T/C - FT/BC | F/T | FT |
-| `rs ft,d` | F/T/D - FT/DE | F/T | FT |
-| `rs ft,e` | F/T/E - FT/DE | F/T | FT |
-| `rs ft,h` | F/T/H - FT/HL | F/T | FT |
-| `rs ft,l` | F/T/L - FT/HL | F/T | FT |
-| `rs ft,i8` | F/T - FT | F/T | FT |
-| `rsa ft,b` | F/T/B - FT/BC | F/T | FT |
-| `rsa ft,c` | F/T/C - FT/BC | F/T | FT |
-| `rsa ft,d` | F/T/D - FT/DE | F/T | FT |
-| `rsa ft,e` | F/T/E - FT/DE | F/T | FT |
-| `rsa ft,h` | F/T/H - FT/HL | F/T | FT |
-| `rsa ft,l` | F/T/L - FT/HL | F/T | FT |
-| `rsa ft,i8` | F/T - FT | F/T | FT |
-| `cmp t,f` | F/T - FT | F | FT |
-| `cmp t,b` | T/B - FT/BC | F | FT |
-| `cmp t,c` | T/C - FT/BC | F | FT |
-| `cmp t,d` | T/D - FT/DE | F | FT |
-| `cmp t,e` | T/E - FT/DE | F | FT |
-| `cmp t,h` | T/H - FT/HL | F | FT |
-| `cmp t,l` | T/L - FT/HL | F | FT |
-| `cmp f,i8` | F - FT | F | FT |
-| `cmp t,i8` | T - FT | F | FT |
-| `cmp b,i8` | B - BC | F | FT |
-| `cmp c,i8` | C - BC | F | FT |
-| `cmp d,i8` | D - DE | F | FT |
-| `cmp e,i8` | E - DE | F | FT |
-| `cmp h,i8` | H - HL | F | FT |
-| `cmp l,i8` | L - HL | F | FT |
-| `cmp ft,bc` | F/T/B/C - FT/BC | F | FT |
-| `cmp ft,de` | F/T/D/E - FT/DE | F | FT |
-| `cmp ft,hl` | F/T/H/L - FT/HL | F | FT |
-| `tst ft` | F/T - FT | F | FT |
-| `tst bc` | B/C - BC | F | FT |
-| `tst de` | D/E - DE | F | FT |
-| `tst hl` | H/L - HL | F | FT |
-| `ld f,i8` | — - — | F | FT |
-| `ld t,i8` | — - — | T | FT |
-| `ld b,i8` | — - — | B | BC |
-| `ld c,i8` | — - — | C | BC |
-| `ld d,i8` | — - — | D | DE |
-| `ld e,i8` | — - — | E | DE |
-| `ld h,i8` | — - — | H | HL |
-| `ld l,i8` | — - — | L | HL |
-| `ld t,f` | F - FT | T | FT |
-| `ld t,b` | B - BC | T | FT |
-| `ld t,c` | C - BC | T | FT |
-| `ld t,d` | D - DE | T | FT |
-| `ld t,e` | E - DE | T | FT |
-| `ld t,h` | H - HL | T | FT |
-| `ld t,l` | L - HL | T | FT |
-| `ld f,t` | T - FT | F | FT |
-| `ld b,t` | T - FT | B | BC |
-| `ld c,t` | T - FT | C | BC |
-| `ld d,t` | T - FT | D | DE |
-| `ld e,t` | T - FT | E | DE |
-| `ld h,t` | T - FT | H | HL |
-| `ld l,t` | T - FT | L | HL |
-| `ld ft,bc` | B/C - BC | F/T | FT |
-| `ld ft,de` | D/E - DE | F/T | FT |
-| `ld ft,hl` | H/L - HL | F/T | FT |
-| `ld bc,ft` | F/T - FT | B/C | BC |
-| `ld de,ft` | F/T - FT | D/E | DE |
-| `ld hl,ft` | F/T - FT | H/L | HL |
-| `exg t,f` | F/T - FT | F/T | FT |
-| `exg t,b` | T/B - FT/BC | T/B | FT/BC |
-| `exg t,c` | T/C - FT/BC | T/C | FT/BC |
-| `exg t,d` | T/D - FT/DE | T/D | FT/DE |
-| `exg t,e` | T/E - FT/DE | T/E | FT/DE |
-| `exg t,h` | T/H - FT/HL | T/H | FT/HL |
-| `exg t,l` | T/L - FT/HL | T/L | FT/HL |
-| `exg ft,bc` | F/T/B/C - FT/BC | F/T/B/C | FT/BC |
-| `exg ft,de` | F/T/D/E - FT/DE | F/T/D/E | FT/DE |
-| `exg ft,hl` | F/T/H/L - FT/HL | F/T/H/L | FT/HL |
-| `ld t,(ft)` | F/T - FT | T | FT |
-| `ld t,(bc)` | B/C - BC | T | FT |
-| `ld t,(de)` | D/E - DE | T | FT |
-| `ld t,(hl)` | H/L - HL | T | FT |
-| `ld (ft),t` | F/T - FT | — | — |
-| `ld (bc),t` | T/B/C - FT/BC | — | — |
-| `ld (de),t` | T/D/E - FT/DE | — | — |
-| `ld (hl),t` | T/H/L - FT/HL | — | — |
-| `ld f,(ft)` | F/T - FT | F | FT |
-| `ld b,(ft)` | F/T - FT | B | BC |
-| `ld c,(ft)` | F/T - FT | C | BC |
-| `ld d,(ft)` | F/T - FT | D | DE |
-| `ld e,(ft)` | F/T - FT | E | DE |
-| `ld h,(ft)` | F/T - FT | H | HL |
-| `ld l,(ft)` | F/T - FT | L | HL |
-| `ld (ft),b` | F/T/B - FT/BC | — | — |
-| `ld (ft),c` | F/T/C - FT/BC | — | — |
-| `ld (ft),d` | F/T/D - FT/DE | — | — |
-| `ld (ft),e` | F/T/E - FT/DE | — | — |
-| `ld (ft),h` | F/T/H - FT/HL | — | — |
-| `ld (ft),l` | F/T/L - FT/HL | — | — |
-| `lio t,(ft)` | F/T - FT | T | FT |
-| `lio t,(bc)` | B/C - BC | T | FT |
-| `lio t,(de)` | D/E - DE | T | FT |
-| `lio t,(hl)` | H/L - HL | T | FT |
-| `lio (ft),t` | F/T - FT | — | — |
-| `lio (bc),t` | T/B/C - FT/BC | — | — |
-| `lio (de),t` | T/D/E - FT/DE | — | — |
-| `lio (hl),t` | T/H/L - FT/HL | — | — |
-| `lco t,(ft)` | F/T - FT | T | FT |
-| `lco t,(bc)` | B/C - BC | T | FT |
-| `lco t,(de)` | D/E - DE | T | FT |
-| `lco t,(hl)` | H/L - HL | T | FT |
-| `lcr t,(c)` | C - BC | T | FT |
-| `lcr (c),t` | T/C - FT/BC | — | — |
-| `push ft` | F/T - FT | — | — ; FT (stack) |
-| `push bc` | B/C - BC | — | — ; BC (stack) |
-| `push de` | D/E - DE | — | — ; DE (stack) |
-| `push hl` | H/L - HL | — | — ; HL (stack) |
-| `pop ft` | — - — | F/T | FT ; FT (stack) |
-| `pop bc` | — - — | B/C | BC ; BC (stack) |
-| `pop de` | — - — | D/E | DE ; DE (stack) |
-| `pop hl` | — - — | H/L | HL ; HL (stack) |
-| `pusha` | F/T/B/C/D/E/H/L - FT/BC/DE/HL | — | — ; FT (stack)/BC (stack)/DE (stack)/HL (stack) |
-| `popa` | — - — | F/T/B/C/D/E/H/L | FT/BC/DE/HL ; FT (stack)/BC (stack)/DE (stack)/HL (stack) |
-| `swap ft` | F/T - FT | F/T | FT ; FT (stack) |
-| `swap bc` | B/C - BC | B/C | BC ; BC (stack) |
-| `swap de` | D/E - DE | D/E | DE ; DE (stack) |
-| `swap hl` | H/L - HL | H/L | HL ; HL (stack) |
-| `swapa` | F/T/B/C/D/E/H/L - FT/BC/DE/HL | F/T/B/C/D/E/H/L | FT/BC/DE/HL ; FT (stack)/BC (stack)/DE (stack)/HL (stack) |
-| `pick ft` | F/T - FT | F/T | FT ; FT (stack) |
-| `pick bc` | B/C - BC | B/C | BC ; BC (stack) |
-| `pick de` | D/E - DE | D/E | DE ; DE (stack) |
-| `pick hl` | H/L - HL | H/L | HL ; HL (stack) |
-| `nop` | — - — | — | — |
-| `j s8` | — - — | — | — ; PC |
-| `j (ft)` | F/T - FT | — | — ; PC |
-| `j (bc)` | B/C - BC | — | — ; PC |
-| `j (de)` | D/E - DE | — | — ; PC |
-| `j (hl)` | H/L - HL | — | — ; PC |
-| `jal (ft)` | F/T - FT | H/L | HL ; PC |
-| `jal (bc)` | B/C - BC | H/L | HL ; PC |
-| `jal (de)` | D/E - DE | H/L | HL ; PC |
-| `jal (hl)` | H/L - HL | H/L | HL ; PC |
-| `j/le s8` | F - FT | — | — ; PC |
-| `j/gt s8` | F - FT | — | — ; PC |
-| `j/lt s8` | F - FT | — | — ; PC |
-| `j/ge s8` | F - FT | — | — ; PC |
-| `j/leu s8` | F - FT | — | — ; PC |
-| `j/gtu s8` | F - FT | — | — ; PC |
-| `j/ltu s8` | F - FT | — | — ; PC |
-| `j/geu s8` | F - FT | — | — ; PC |
-| `j/eq s8` | F - FT | — | — ; PC |
-| `j/ne s8` | F - FT | — | — ; PC |
-| `dj f,s8` | F - FT | F | FT ; PC |
-| `dj t,s8` | T - FT | T | FT ; PC |
-| `dj b,s8` | B - BC | B | BC ; PC |
-| `dj c,s8` | C - BC | C | BC ; PC |
-| `dj d,s8` | D - DE | D | DE ; PC |
-| `dj e,s8` | E - DE | E | DE ; PC |
-| `dj h,s8` | H - HL | H | HL ; PC |
-| `dj l,s8` | L - HL | L | HL ; PC |
-| `sys i8` | — - — | — | — ; HL (stack)/PC |
-| `ei` | — - — | — | — ; IEF |
-| `di` | — - — | — | — ; IEF |
-| `reti` | H/L - HL | H/L | HL ; HL (stack)/PC |
+| `ADD T,F` | F/T - FT | T | FT |
+| `ADD T,T` | T - FT | T | FT |
+| `ADD T,B` | T/B - FT/BC | T | FT |
+| `ADD T,C` | T/C - FT/BC | T | FT |
+| `ADD T,D` | T/D - FT/DE | T | FT |
+| `ADD T,E` | T/E - FT/DE | T | FT |
+| `ADD T,H` | T/H - FT/HL | T | FT |
+| `ADD T,L` | T/L - FT/HL | T | FT |
+| `ADD FT,FT` | F/T - FT | F/T | FT |
+| `ADD FT,BC` | F/T/B/C - FT/BC | F/T | FT |
+| `ADD FT,DE` | F/T/D/E - FT/DE | F/T | FT |
+| `ADD FT,HL` | F/T/H/L - FT/HL | F/T | FT |
+| `ADD F,I8` | F - FT | F | FT |
+| `ADD T,I8` | T - FT | T | FT |
+| `ADD B,I8` | B - BC | B | BC |
+| `ADD C,I8` | C - BC | C | BC |
+| `ADD D,I8` | D - DE | D | DE |
+| `ADD E,I8` | E - DE | E | DE |
+| `ADD H,I8` | H - HL | H | HL |
+| `ADD L,I8` | L - HL | L | HL |
+| `ADD FT,S8` | F/T - FT | F/T | FT |
+| `ADD BC,S8` | B/C - BC | B/C | BC |
+| `ADD DE,S8` | D/E - DE | D/E | DE |
+| `ADD HL,S8` | H/L - HL | H/L | HL |
+| `SUB T,F` | F/T - FT | T | FT |
+| `SUB T,B` | T/B - FT/BC | T | FT |
+| `SUB T,C` | T/C - FT/BC | T | FT |
+| `SUB T,D` | T/D - FT/DE | T | FT |
+| `SUB T,E` | T/E - FT/DE | T | FT |
+| `SUB T,H` | T/H - FT/HL | T | FT |
+| `SUB T,L` | T/L - FT/HL | T | FT |
+| `SUB FT,BC` | F/T/B/C - FT/BC | F/T | FT |
+| `SUB FT,DE` | F/T/D/E - FT/DE | F/T | FT |
+| `SUB FT,HL` | F/T/H/L - FT/HL | F/T | FT |
+| `NEG T` | T - FT | T | FT |
+| `NEG FT` | F/T - FT | F/T | FT |
+| `EXT` | T - FT | F | FT |
+| `AND T,F` | F/T - FT | T | FT |
+| `AND T,B` | T/B - FT/BC | T | FT |
+| `AND T,C` | T/C - FT/BC | T | FT |
+| `AND T,D` | T/D - FT/DE | T | FT |
+| `AND T,E` | T/E - FT/DE | T | FT |
+| `AND T,H` | T/H - FT/HL | T | FT |
+| `AND T,L` | T/L - FT/HL | T | FT |
+| `AND T,I8` | T - FT | T | FT |
+| `OR T,F` | F/T - FT | T | FT |
+| `OR T,B` | T/B - FT/BC | T | FT |
+| `OR T,C` | T/C - FT/BC | T | FT |
+| `OR T,D` | T/D - FT/DE | T | FT |
+| `OR T,E` | T/E - FT/DE | T | FT |
+| `OR T,H` | T/H - FT/HL | T | FT |
+| `OR T,L` | T/L - FT/HL | T | FT |
+| `OR T,I8` | T - FT | T | FT |
+| `XOR T,F` | F/T - FT | T | FT |
+| `XOR T,B` | T/B - FT/BC | T | FT |
+| `XOR T,C` | T/C - FT/BC | T | FT |
+| `XOR T,D` | T/D - FT/DE | T | FT |
+| `XOR T,E` | T/E - FT/DE | T | FT |
+| `XOR T,H` | T/H - FT/HL | T | FT |
+| `XOR T,L` | T/L - FT/HL | T | FT |
+| `XOR T,I8` | T - FT | T | FT |
+| `NOT F` | F - FT | F | FT |
+| `LS FT,B` | F/T/B - FT/BC | F/T | FT |
+| `LS FT,C` | F/T/C - FT/BC | F/T | FT |
+| `LS FT,D` | F/T/D - FT/DE | F/T | FT |
+| `LS FT,E` | F/T/E - FT/DE | F/T | FT |
+| `LS FT,H` | F/T/H - FT/HL | F/T | FT |
+| `LS FT,L` | F/T/L - FT/HL | F/T | FT |
+| `LS FT,I8` | F/T - FT | F/T | FT |
+| `RS FT,B` | F/T/B - FT/BC | F/T | FT |
+| `RS FT,C` | F/T/C - FT/BC | F/T | FT |
+| `RS FT,D` | F/T/D - FT/DE | F/T | FT |
+| `RS FT,E` | F/T/E - FT/DE | F/T | FT |
+| `RS FT,H` | F/T/H - FT/HL | F/T | FT |
+| `RS FT,L` | F/T/L - FT/HL | F/T | FT |
+| `RS FT,I8` | F/T - FT | F/T | FT |
+| `RSA FT,B` | F/T/B - FT/BC | F/T | FT |
+| `RSA FT,C` | F/T/C - FT/BC | F/T | FT |
+| `RSA FT,D` | F/T/D - FT/DE | F/T | FT |
+| `RSA FT,E` | F/T/E - FT/DE | F/T | FT |
+| `RSA FT,H` | F/T/H - FT/HL | F/T | FT |
+| `RSA FT,L` | F/T/L - FT/HL | F/T | FT |
+| `RSA FT,I8` | F/T - FT | F/T | FT |
+| `CMP T,F` | F/T - FT | F | FT |
+| `CMP T,B` | T/B - FT/BC | F | FT |
+| `CMP T,C` | T/C - FT/BC | F | FT |
+| `CMP T,D` | T/D - FT/DE | F | FT |
+| `CMP T,E` | T/E - FT/DE | F | FT |
+| `CMP T,H` | T/H - FT/HL | F | FT |
+| `CMP T,L` | T/L - FT/HL | F | FT |
+| `CMP F,I8` | F - FT | F | FT |
+| `CMP T,I8` | T - FT | F | FT |
+| `CMP B,I8` | B - BC | F | FT |
+| `CMP C,I8` | C - BC | F | FT |
+| `CMP D,I8` | D - DE | F | FT |
+| `CMP E,I8` | E - DE | F | FT |
+| `CMP H,I8` | H - HL | F | FT |
+| `CMP L,I8` | L - HL | F | FT |
+| `CMP FT,BC` | F/T/B/C - FT/BC | F | FT |
+| `CMP FT,DE` | F/T/D/E - FT/DE | F | FT |
+| `CMP FT,HL` | F/T/H/L - FT/HL | F | FT |
+| `TST FT` | F/T - FT | F | FT |
+| `TST BC` | B/C - BC | F | FT |
+| `TST DE` | D/E - DE | F | FT |
+| `TST HL` | H/L - HL | F | FT |
+| `LD F,I8` | — - — | F | FT |
+| `LD T,I8` | — - — | T | FT |
+| `LD B,I8` | — - — | B | BC |
+| `LD C,I8` | — - — | C | BC |
+| `LD D,I8` | — - — | D | DE |
+| `LD E,I8` | — - — | E | DE |
+| `LD H,I8` | — - — | H | HL |
+| `LD L,I8` | — - — | L | HL |
+| `LD T,F` | F - FT | T | FT |
+| `LD T,B` | B - BC | T | FT |
+| `LD T,C` | C - BC | T | FT |
+| `LD T,D` | D - DE | T | FT |
+| `LD T,E` | E - DE | T | FT |
+| `LD T,H` | H - HL | T | FT |
+| `LD T,L` | L - HL | T | FT |
+| `LD F,T` | T - FT | F | FT |
+| `LD B,T` | T - FT | B | BC |
+| `LD C,T` | T - FT | C | BC |
+| `LD D,T` | T - FT | D | DE |
+| `LD E,T` | T - FT | E | DE |
+| `LD H,T` | T - FT | H | HL |
+| `LD L,T` | T - FT | L | HL |
+| `LD FT,BC` | B/C - BC | F/T | FT |
+| `LD FT,DE` | D/E - DE | F/T | FT |
+| `LD FT,HL` | H/L - HL | F/T | FT |
+| `LD BC,FT` | F/T - FT | B/C | BC |
+| `LD DE,FT` | F/T - FT | D/E | DE |
+| `LD HL,FT` | F/T - FT | H/L | HL |
+| `EXG T,F` | F/T - FT | F/T | FT |
+| `EXG T,B` | T/B - FT/BC | T/B | FT/BC |
+| `EXG T,C` | T/C - FT/BC | T/C | FT/BC |
+| `EXG T,D` | T/D - FT/DE | T/D | FT/DE |
+| `EXG T,E` | T/E - FT/DE | T/E | FT/DE |
+| `EXG T,H` | T/H - FT/HL | T/H | FT/HL |
+| `EXG T,L` | T/L - FT/HL | T/L | FT/HL |
+| `EXG FT,BC` | F/T/B/C - FT/BC | F/T/B/C | FT/BC |
+| `EXG FT,DE` | F/T/D/E - FT/DE | F/T/D/E | FT/DE |
+| `EXG FT,HL` | F/T/H/L - FT/HL | F/T/H/L | FT/HL |
+| `LD T,(FT)` | F/T - FT | T | FT |
+| `LD T,(BC)` | B/C - BC | T | FT |
+| `LD T,(DE)` | D/E - DE | T | FT |
+| `LD T,(HL)` | H/L - HL | T | FT |
+| `LD (FT),T` | F/T - FT | — | — |
+| `LD (BC),T` | T/B/C - FT/BC | — | — |
+| `LD (DE),T` | T/D/E - FT/DE | — | — |
+| `LD (HL),T` | T/H/L - FT/HL | — | — |
+| `LD F,(FT)` | F/T - FT | F | FT |
+| `LD B,(FT)` | F/T - FT | B | BC |
+| `LD C,(FT)` | F/T - FT | C | BC |
+| `LD D,(FT)` | F/T - FT | D | DE |
+| `LD E,(FT)` | F/T - FT | E | DE |
+| `LD H,(FT)` | F/T - FT | H | HL |
+| `LD L,(FT)` | F/T - FT | L | HL |
+| `LD (FT),B` | F/T/B - FT/BC | — | — |
+| `LD (FT),C` | F/T/C - FT/BC | — | — |
+| `LD (FT),D` | F/T/D - FT/DE | — | — |
+| `LD (FT),E` | F/T/E - FT/DE | — | — |
+| `LD (FT),H` | F/T/H - FT/HL | — | — |
+| `LD (FT),L` | F/T/L - FT/HL | — | — |
+| `LIO T,(FT)` | F/T - FT | T | FT |
+| `LIO T,(BC)` | B/C - BC | T | FT |
+| `LIO T,(DE)` | D/E - DE | T | FT |
+| `LIO T,(HL)` | H/L - HL | T | FT |
+| `LIO (FT),T` | F/T - FT | — | — |
+| `LIO (BC),T` | T/B/C - FT/BC | — | — |
+| `LIO (DE),T` | T/D/E - FT/DE | — | — |
+| `LIO (HL),T` | T/H/L - FT/HL | — | — |
+| `LCO T,(FT)` | F/T - FT | T | FT |
+| `LCO T,(BC)` | B/C - BC | T | FT |
+| `LCO T,(DE)` | D/E - DE | T | FT |
+| `LCO T,(HL)` | H/L - HL | T | FT |
+| `LCR T,(C)` | C - BC | T | FT |
+| `LCR (C),T` | T/C - FT/BC | — | — |
+| `PUSH FT` | F/T - FT | — | — ; FT (stack) |
+| `PUSH BC` | B/C - BC | — | — ; BC (stack) |
+| `PUSH DE` | D/E - DE | — | — ; DE (stack) |
+| `PUSH HL` | H/L - HL | — | — ; HL (stack) |
+| `POP FT` | — - — | F/T | FT ; FT (stack) |
+| `POP BC` | — - — | B/C | BC ; BC (stack) |
+| `POP DE` | — - — | D/E | DE ; DE (stack) |
+| `POP HL` | — - — | H/L | HL ; HL (stack) |
+| `PUSHA` | F/T/B/C/D/E/H/L - FT/BC/DE/HL | — | — ; FT (stack)/BC (stack)/DE (stack)/HL (stack) |
+| `POPA` | — - — | F/T/B/C/D/E/H/L | FT/BC/DE/HL ; FT (stack)/BC (stack)/DE (stack)/HL (stack) |
+| `SWAP FT` | F/T - FT | F/T | FT ; FT (stack) |
+| `SWAP BC` | B/C - BC | B/C | BC ; BC (stack) |
+| `SWAP DE` | D/E - DE | D/E | DE ; DE (stack) |
+| `SWAP HL` | H/L - HL | H/L | HL ; HL (stack) |
+| `SWAPA` | F/T/B/C/D/E/H/L - FT/BC/DE/HL | F/T/B/C/D/E/H/L | FT/BC/DE/HL ; FT (stack)/BC (stack)/DE (stack)/HL (stack) |
+| `PICK FT` | F/T - FT | F/T | FT ; FT (stack) |
+| `PICK BC` | B/C - BC | B/C | BC ; BC (stack) |
+| `PICK DE` | D/E - DE | D/E | DE ; DE (stack) |
+| `PICK HL` | H/L - HL | H/L | HL ; HL (stack) |
+| `NOP` | — - — | — | — |
+| `J S8` | — - — | — | — ; PC |
+| `J (FT)` | F/T - FT | — | — ; PC |
+| `J (BC)` | B/C - BC | — | — ; PC |
+| `J (DE)` | D/E - DE | — | — ; PC |
+| `J (HL)` | H/L - HL | — | — ; PC |
+| `JAL (FT)` | F/T - FT | H/L | HL ; PC |
+| `JAL (BC)` | B/C - BC | H/L | HL ; PC |
+| `JAL (DE)` | D/E - DE | H/L | HL ; PC |
+| `JAL (HL)` | H/L - HL | H/L | HL ; PC |
+| `J/LE S8` | F - FT | — | — ; PC |
+| `J/GT S8` | F - FT | — | — ; PC |
+| `J/LT S8` | F - FT | — | — ; PC |
+| `J/GE S8` | F - FT | — | — ; PC |
+| `J/LEU S8` | F - FT | — | — ; PC |
+| `J/GTU S8` | F - FT | — | — ; PC |
+| `J/LTU S8` | F - FT | — | — ; PC |
+| `J/GEU S8` | F - FT | — | — ; PC |
+| `J/EQ S8` | F - FT | — | — ; PC |
+| `J/NE S8` | F - FT | — | — ; PC |
+| `DJ F,S8` | F - FT | F | FT ; PC |
+| `DJ T,S8` | T - FT | T | FT ; PC |
+| `DJ B,S8` | B - BC | B | BC ; PC |
+| `DJ C,S8` | C - BC | C | BC ; PC |
+| `DJ D,S8` | D - DE | D | DE ; PC |
+| `DJ E,S8` | E - DE | E | DE ; PC |
+| `DJ H,S8` | H - HL | H | HL ; PC |
+| `DJ L,S8` | L - HL | L | HL ; PC |
+| `SYS I8` | — - — | — | — ; HL (stack)/PC |
+| `EI` | — - — | — | — ; IEF |
+| `DI` | — - — | — | — ; IEF |
+| `RETI` | H/L - HL | H/L | HL ; HL (stack)/PC |
 
 ### Native Instruction Notes
 
-- **Reads/Writes/Clobbers notation**: see [How to read the Native Instruction Table](#how-to-read-the-native-instruction-table) for column definitions and a worked `cmp b,i8` example.
+- **Reads/Writes/Clobbers notation**: see [How to read the Native Instruction Table](#how-to-read-the-native-instruction-table) for column definitions and a worked `CMP B,I8` example.
 - **Stack operations in the table:** For `PUSH R16`, the **Reads** column lists the two bytes of the 16-bit register that is pushed as a single word. The `; R16 (stack)` side effect in the **Clobbers** column means the value is duplicated onto that register's independent 16-bit stack. For `POP R16`, the **Writes** column lists the two bytes that are updated when the popped 16-bit word is loaded back into the register, and the **Clobbers** column lists the affected parent pair. `PUSHA`/`POPA` do the same for all four pairs at once.
-- **Stack operation semantics** (`push`/`pop`/`swap`/`pick`): see [Register Stacks](#register-stacks) and the [PUSH](#push-r16)/[POP](#pop-r16)/[SWAP](#swap-r16)/[PICK](#pick-r16) instruction subsections.
-- **J/CC condition codes**: `le`, `gt`, `lt`, `ge` (signed), `leu`, `gtu`, `ltu`, `geu` (unsigned), `eq`/`z` (equal), `ne`/`nz` (not equal). All read F to evaluate the condition.
+- **Stack operation semantics** (`PUSH`/`POP`/`SWAP`/`PICK`): see [Register Stacks](#register-stacks) and the [PUSH](#push-r16)/[POP](#pop-r16)/[SWAP](#swap-r16)/[PICK](#pick-r16) instruction subsections.
+- **J/CC condition codes**: `LE`, `GT`, `LT`, `GE` (signed), `LEU`, `GTU`, `LTU`, `GEU` (unsigned), `EQ`/`Z` (equal), `NE`/`NZ` (not equal). All read F to evaluate the condition.
 - **LIO/LCO**: Assert IO or CODE signal respectively during the memory access.
 - **LCO** has no store form (only load).
 - **DJ** decrements the register first, then tests for zero. The register is listed in the **Writes** column because it is always modified; `PC` is listed after `;` in the **Clobbers** column because it may be modified.
@@ -1816,10 +1816,10 @@ Instructions synthesized by the assembler into sequences of native instructions.
 
 | Instruction | Reads | Writes | Clobbers | Expands To |
 |---|---|---|---|---|
-| `ld ft,i16` | — - — | F/T | FT | Two `LD` instructions; optimized for FT (see below) |
-| `ld bc,i16` | — - — | B/C | BC | `LD B, high` / `LD C, low` |
-| `ld de,i16` | — - — | D/E | DE | `LD D, high` / `LD E, low` |
-| `ld hl,i16` | — - — | H/L | HL | `LD H, high` / `LD L, low` |
+| `LD FT,I16` | — - — | F/T | FT | Two `LD` instructions; optimized for FT (see below) |
+| `LD BC,I16` | — - — | B/C | BC | `LD B, high` / `LD C, low` |
+| `LD DE,I16` | — - — | D/E | DE | `LD D, high` / `LD E, low` |
+| `LD HL,I16` | — - — | H/L | HL | `LD H, high` / `LD L, low` |
 
 For `LD FT, i16`, the assembler optimizes based on the immediate value:
 - `LD FT, $00xx` → `LD T, xx` / `EXT` (3 bytes)
@@ -1832,44 +1832,44 @@ Native `SUB` supports only register-to-register. These forms are synthesized by 
 
 | Instruction | Reads | Writes | Clobbers | Expands To |
 |---|---|---|---|---|
-| `sub f,i8` | F - FT | F | FT | `ADD F, -i8` |
-| `sub t,i8` | T - FT | T | FT | `ADD T, -i8` |
-| `sub b,i8` | B - BC | B | BC | `ADD B, -i8` |
-| `sub c,i8` | C - BC | C | BC | `ADD C, -i8` |
-| `sub d,i8` | D - DE | D | DE | `ADD D, -i8` |
-| `sub e,i8` | E - DE | E | DE | `ADD E, -i8` |
-| `sub h,i8` | H - HL | H | HL | `ADD H, -i8` |
-| `sub l,i8` | L - HL | L | HL | `ADD L, -i8` |
-| `sub ft,s8` | F/T - FT | F/T | FT | `ADD FT, -s8` |
-| `sub bc,s8` | B/C - BC | B/C | BC | `ADD BC, -s8` |
-| `sub de,s8` | D/E - DE | D/E | DE | `ADD DE, -s8` |
-| `sub hl,s8` | H/L - HL | H/L | HL | `ADD HL, -s8` |
-| `sub ft,i16` | F/T - FT | F/T | FT | `ADD FT, -i16` (further expanded) |
-| `sub bc,i16` | B/C - BC | B/C | BC | `ADD BC, -i16` (further expanded) |
-| `sub de,i16` | D/E - DE | D/E | DE | `ADD DE, -i16` (further expanded) |
-| `sub hl,i16` | H/L - HL | H/L | HL | `ADD HL, -i16` (further expanded) |
+| `SUB F,I8` | F - FT | F | FT | `ADD F, -i8` |
+| `SUB T,I8` | T - FT | T | FT | `ADD T, -i8` |
+| `SUB B,I8` | B - BC | B | BC | `ADD B, -i8` |
+| `SUB C,I8` | C - BC | C | BC | `ADD C, -i8` |
+| `SUB D,I8` | D - DE | D | DE | `ADD D, -i8` |
+| `SUB E,I8` | E - DE | E | DE | `ADD E, -i8` |
+| `SUB H,I8` | H - HL | H | HL | `ADD H, -i8` |
+| `SUB L,I8` | L - HL | L | HL | `ADD L, -i8` |
+| `SUB FT,S8` | F/T - FT | F/T | FT | `ADD FT, -s8` |
+| `SUB BC,S8` | B/C - BC | B/C | BC | `ADD BC, -s8` |
+| `SUB DE,S8` | D/E - DE | D/E | DE | `ADD DE, -s8` |
+| `SUB HL,S8` | H/L - HL | H/L | HL | `ADD HL, -s8` |
+| `SUB FT,I16` | F/T - FT | F/T | FT | `ADD FT, -i16` (further expanded) |
+| `SUB BC,I16` | B/C - BC | B/C | BC | `ADD BC, -i16` (further expanded) |
+| `SUB DE,I16` | D/E - DE | D/E | DE | `ADD DE, -i16` (further expanded) |
+| `SUB HL,I16` | H/L - HL | H/L | HL | `ADD HL, -i16` (further expanded) |
 
 #### 16-bit ADD with Immediate
 
 | Instruction | Reads | Writes | Clobbers | Expands To |
 |---|---|---|---|---|
-| `add ft,i16` | F/T - FT | F/T | FT | `ADD FT, s8` if it fits; otherwise split into low-byte and high-byte adjustments |
-| `add bc,i16` | B/C - BC | B/C | BC | `ADD BC, s8` if it fits; otherwise split into low-byte and high-byte adjustments |
-| `add de,i16` | D/E - DE | D/E | DE | `ADD DE, s8` if it fits; otherwise split into low-byte and high-byte adjustments |
-| `add hl,i16` | H/L - HL | H/L | HL | `ADD HL, s8` if it fits; otherwise split into low-byte and high-byte adjustments |
+| `ADD FT,I16` | F/T - FT | F/T | FT | `ADD FT, s8` if it fits; otherwise split into low-byte and high-byte adjustments |
+| `ADD BC,I16` | B/C - BC | B/C | BC | `ADD BC, s8` if it fits; otherwise split into low-byte and high-byte adjustments |
+| `ADD DE,I16` | D/E - DE | D/E | DE | `ADD DE, s8` if it fits; otherwise split into low-byte and high-byte adjustments |
+| `ADD HL,I16` | H/L - HL | H/L | HL | `ADD HL, s8` if it fits; otherwise split into low-byte and high-byte adjustments |
 
 #### NOT
 
 | Instruction | Reads | Writes | Clobbers | Expands To |
 |---|---|---|---|---|
-| `not t` | T - FT | T | FT | `XOR T, $FF` |
-| `not ft` | F/T - FT | F/T | FT | `XOR T, $FF` / `NOT F` |
+| `NOT T` | T - FT | T | FT | `XOR T, $FF` |
+| `NOT FT` | F/T - FT | F/T | FT | `XOR T, $FF` / `NOT F` |
 
 #### Jump and Link with Immediate
 
 | Instruction | Reads | Writes | Clobbers | Expands To |
 |---|---|---|---|---|
-| `jal i16` | — - — | H/L | HL ; PC | `LD HL, i16` / `JAL (HL)` |
+| `JAL I16` | — - — | H/L | HL ; PC | `LD HL, i16` / `JAL (HL)` |
 
 #### Post-increment and Pre-decrement Memory Access
 
@@ -1879,22 +1879,22 @@ The native instruction set does not include auto-increment/decrement addressing.
 
 | Instruction | Reads | Writes | Clobbers |
 |---|---|---|---|
-| `ld t,(ft+)` | F/T - FT | F/T | FT |
-| `ld t,(bc+)` | B/C - BC | T/B/C | FT/BC |
-| `ld t,(de+)` | D/E - DE | T/D/E | FT/DE |
-| `ld t,(hl+)` | H/L - HL | T/H/L | FT/HL |
-| `ld (ft+),t` | F/T - FT | F/T | FT |
-| `ld (bc+),t` | T/B/C - FT/BC | B/C | BC |
-| `ld (de+),t` | T/D/E - FT/DE | D/E | DE |
-| `ld (hl+),t` | T/H/L - FT/HL | H/L | HL |
-| `ld t,(-ft)` | F/T - FT | F/T | FT |
-| `ld t,(-bc)` | B/C - BC | T/B/C | FT/BC |
-| `ld t,(-de)` | D/E - DE | T/D/E | FT/DE |
-| `ld t,(-hl)` | H/L - HL | T/H/L | FT/HL |
-| `ld (-ft),t` | F/T - FT | F/T | FT |
-| `ld (-bc),t` | T/B/C - FT/BC | B/C | BC |
-| `ld (-de),t` | T/D/E - FT/DE | D/E | DE |
-| `ld (-hl),t` | T/H/L - FT/HL | H/L | HL |
+| `LD T,(FT+)` | F/T - FT | F/T | FT |
+| `LD T,(BC+)` | B/C - BC | T/B/C | FT/BC |
+| `LD T,(DE+)` | D/E - DE | T/D/E | FT/DE |
+| `LD T,(HL+)` | H/L - HL | T/H/L | FT/HL |
+| `LD (FT+),T` | F/T - FT | F/T | FT |
+| `LD (BC+),T` | T/B/C - FT/BC | B/C | BC |
+| `LD (DE+),T` | T/D/E - FT/DE | D/E | DE |
+| `LD (HL+),T` | T/H/L - FT/HL | H/L | HL |
+| `LD T,(-FT)` | F/T - FT | F/T | FT |
+| `LD T,(-BC)` | B/C - BC | T/B/C | FT/BC |
+| `LD T,(-DE)` | D/E - DE | T/D/E | FT/DE |
+| `LD T,(-HL)` | H/L - HL | T/H/L | FT/HL |
+| `LD (-FT),T` | F/T - FT | F/T | FT |
+| `LD (-BC),T` | T/B/C - FT/BC | B/C | BC |
+| `LD (-DE),T` | T/D/E - FT/DE | D/E | DE |
+| `LD (-HL),T` | T/H/L - FT/HL | H/L | HL |
 
 **Expansions:**
 - `LD T, (R16+)` → `LD T, (R16)` / `ADD R16, 1`
@@ -1908,24 +1908,24 @@ Loading or storing a full 16-bit register pair through a non-FT pointer requires
 
 | Instruction | Reads | Writes | Clobbers |
 |---|---|---|---|
-| `ld ft,(bc)` | B/C - BC | F/T | FT |
-| `ld ft,(de)` | D/E - DE | F/T | FT |
-| `ld ft,(hl)` | H/L - HL | F/T | FT |
-| `ld (bc),ft` | F/T/B/C - FT/BC | B/C | BC |
-| `ld (de),ft` | F/T/D/E - FT/DE | D/E | DE |
-| `ld (hl),ft` | F/T/H/L - FT/HL | H/L | HL |
-| `ld ft,(bc+)` | B/C - BC | F/T/B/C | FT/BC |
-| `ld ft,(de+)` | D/E - DE | F/T/D/E | FT/DE |
-| `ld ft,(hl+)` | H/L - HL | F/T/H/L | FT/HL |
-| `ld (bc+),ft` | F/T/B/C - FT/BC | B/C | BC |
-| `ld (de+),ft` | F/T/D/E - FT/DE | D/E | DE |
-| `ld (hl+),ft` | F/T/H/L - FT/HL | H/L | HL |
-| `ld ft,(-bc)` | B/C - BC | F/T/B/C | FT/BC |
-| `ld ft,(-de)` | D/E - DE | F/T/D/E | FT/DE |
-| `ld ft,(-hl)` | H/L - HL | F/T/H/L | FT/HL |
-| `ld (-bc),ft` | F/T/B/C - FT/BC | B/C | BC |
-| `ld (-de),ft` | F/T/D/E - FT/DE | D/E | DE |
-| `ld (-hl),ft` | F/T/H/L - FT/HL | H/L | HL |
+| `LD FT,(BC)` | B/C - BC | F/T | FT |
+| `LD FT,(DE)` | D/E - DE | F/T | FT |
+| `LD FT,(HL)` | H/L - HL | F/T | FT |
+| `LD (BC),FT` | F/T/B/C - FT/BC | B/C | BC |
+| `LD (DE),FT` | F/T/D/E - FT/DE | D/E | DE |
+| `LD (HL),FT` | F/T/H/L - FT/HL | H/L | HL |
+| `LD FT,(BC+)` | B/C - BC | F/T/B/C | FT/BC |
+| `LD FT,(DE+)` | D/E - DE | F/T/D/E | FT/DE |
+| `LD FT,(HL+)` | H/L - HL | F/T/H/L | FT/HL |
+| `LD (BC+),FT` | F/T/B/C - FT/BC | B/C | BC |
+| `LD (DE+),FT` | F/T/D/E - FT/DE | D/E | DE |
+| `LD (HL+),FT` | F/T/H/L - FT/HL | H/L | HL |
+| `LD FT,(-BC)` | B/C - BC | F/T/B/C | FT/BC |
+| `LD FT,(-DE)` | D/E - DE | F/T/D/E | FT/DE |
+| `LD FT,(-HL)` | H/L - HL | F/T/H/L | FT/HL |
+| `LD (-BC),FT` | F/T/B/C - FT/BC | B/C | BC |
+| `LD (-DE),FT` | F/T/D/E - FT/DE | D/E | DE |
+| `LD (-HL),FT` | F/T/H/L - FT/HL | H/L | HL |
 
 **Expansions:**
 - `LD FT, (R16)` → `LD T, (R16)` / `ADD R16, 1` / `EXG F,T` / `LD T, (R16)` / `ADD R16, -1` / `EXG F,T`
@@ -1941,24 +1941,24 @@ Loading or storing a full 16-bit register pair through `FT` also uses synthesize
 
 | Instruction | Reads | Writes | Clobbers |
 |---|---|---|---|
-| `ld bc,(ft)` | F/T - FT | B/C | BC |
-| `ld de,(ft)` | F/T - FT | D/E | DE |
-| `ld hl,(ft)` | F/T - FT | H/L | HL |
-| `ld (ft),bc` | F/T/B/C - FT/BC | F/T | FT |
-| `ld (ft),de` | F/T/D/E - FT/DE | F/T | FT |
-| `ld (ft),hl` | F/T/H/L - FT/HL | F/T | FT |
-| `ld bc,(ft+)` | F/T - FT | F/T/B/C | FT/BC |
-| `ld de,(ft+)` | F/T - FT | F/T/D/E | FT/DE |
-| `ld hl,(ft+)` | F/T - FT | F/T/H/L | FT/HL |
-| `ld (ft+),bc` | F/T/B/C - FT/BC | F/T | FT |
-| `ld (ft+),de` | F/T/D/E - FT/DE | F/T | FT |
-| `ld (ft+),hl` | F/T/H/L - FT/HL | F/T | FT |
-| `ld bc,(-ft)` | F/T - FT | F/T/B/C | FT/BC |
-| `ld de,(-ft)` | F/T - FT | F/T/D/E | FT/DE |
-| `ld hl,(-ft)` | F/T - FT | F/T/H/L | FT/HL |
-| `ld (-ft),bc` | F/T/B/C - FT/BC | F/T | FT |
-| `ld (-ft),de` | F/T/D/E - FT/DE | F/T | FT |
-| `ld (-ft),hl` | F/T/H/L - FT/HL | F/T | FT |
+| `LD BC,(FT)` | F/T - FT | B/C | BC |
+| `LD DE,(FT)` | F/T - FT | D/E | DE |
+| `LD HL,(FT)` | F/T - FT | H/L | HL |
+| `LD (FT),BC` | F/T/B/C - FT/BC | F/T | FT |
+| `LD (FT),DE` | F/T/D/E - FT/DE | F/T | FT |
+| `LD (FT),HL` | F/T/H/L - FT/HL | F/T | FT |
+| `LD BC,(FT+)` | F/T - FT | F/T/B/C | FT/BC |
+| `LD DE,(FT+)` | F/T - FT | F/T/D/E | FT/DE |
+| `LD HL,(FT+)` | F/T - FT | F/T/H/L | FT/HL |
+| `LD (FT+),BC` | F/T/B/C - FT/BC | F/T | FT |
+| `LD (FT+),DE` | F/T/D/E - FT/DE | F/T | FT |
+| `LD (FT+),HL` | F/T/H/L - FT/HL | F/T | FT |
+| `LD BC,(-FT)` | F/T - FT | F/T/B/C | FT/BC |
+| `LD DE,(-FT)` | F/T - FT | F/T/D/E | FT/DE |
+| `LD HL,(-FT)` | F/T - FT | F/T/H/L | FT/HL |
+| `LD (-FT),BC` | F/T/B/C - FT/BC | F/T | FT |
+| `LD (-FT),DE` | F/T/D/E - FT/DE | F/T | FT |
+| `LD (-FT),HL` | F/T/H/L - FT/HL | F/T | FT |
 
 **Expansions (for BC/DE/HL through FT indirect):**
 - `LD R16, (FT)` → `LD low, (FT)` / `ADD FT, 1` / `LD high, (FT)` / `ADD FT, -1`
@@ -1974,30 +1974,30 @@ The native `LD R8, (FT)` and `LD (FT), R8` instructions transfer any 8-bit regis
 
 | Instruction | Reads | Writes | Clobbers |
 |---|---|---|---|
-| `ld b,(ft+)` | F/T - FT | B/F/T | FT/BC |
-| `ld c,(ft+)` | F/T - FT | C/F/T | FT/BC |
-| `ld d,(ft+)` | F/T - FT | D/F/T | FT/DE |
-| `ld e,(ft+)` | F/T - FT | E/F/T | FT/DE |
-| `ld h,(ft+)` | F/T - FT | H/F/T | FT/HL |
-| `ld l,(ft+)` | F/T - FT | L/F/T | FT/HL |
-| `ld (ft+),b` | F/T/B - FT/BC | F/T | FT |
-| `ld (ft+),c` | F/T/C - FT/BC | F/T | FT |
-| `ld (ft+),d` | F/T/D - FT/DE | F/T | FT |
-| `ld (ft+),e` | F/T/E - FT/DE | F/T | FT |
-| `ld (ft+),h` | F/T/H - FT/HL | F/T | FT |
-| `ld (ft+),l` | F/T/L - FT/HL | F/T | FT |
-| `ld b,(-ft)` | F/T - FT | B/F/T | FT/BC |
-| `ld c,(-ft)` | F/T - FT | C/F/T | FT/BC |
-| `ld d,(-ft)` | F/T - FT | D/F/T | FT/DE |
-| `ld e,(-ft)` | F/T - FT | E/F/T | FT/DE |
-| `ld h,(-ft)` | F/T - FT | H/F/T | FT/HL |
-| `ld l,(-ft)` | F/T - FT | L/F/T | FT/HL |
-| `ld (-ft),b` | F/T/B - FT/BC | F/T | FT |
-| `ld (-ft),c` | F/T/C - FT/BC | F/T | FT |
-| `ld (-ft),d` | F/T/D - FT/DE | F/T | FT |
-| `ld (-ft),e` | F/T/E - FT/DE | F/T | FT |
-| `ld (-ft),h` | F/T/H - FT/HL | F/T | FT |
-| `ld (-ft),l` | F/T/L - FT/HL | F/T | FT |
+| `LD B,(FT+)` | F/T - FT | B/F/T | FT/BC |
+| `LD C,(FT+)` | F/T - FT | C/F/T | FT/BC |
+| `LD D,(FT+)` | F/T - FT | D/F/T | FT/DE |
+| `LD E,(FT+)` | F/T - FT | E/F/T | FT/DE |
+| `LD H,(FT+)` | F/T - FT | H/F/T | FT/HL |
+| `LD L,(FT+)` | F/T - FT | L/F/T | FT/HL |
+| `LD (FT+),B` | F/T/B - FT/BC | F/T | FT |
+| `LD (FT+),C` | F/T/C - FT/BC | F/T | FT |
+| `LD (FT+),D` | F/T/D - FT/DE | F/T | FT |
+| `LD (FT+),E` | F/T/E - FT/DE | F/T | FT |
+| `LD (FT+),H` | F/T/H - FT/HL | F/T | FT |
+| `LD (FT+),L` | F/T/L - FT/HL | F/T | FT |
+| `LD B,(-FT)` | F/T - FT | B/F/T | FT/BC |
+| `LD C,(-FT)` | F/T - FT | C/F/T | FT/BC |
+| `LD D,(-FT)` | F/T - FT | D/F/T | FT/DE |
+| `LD E,(-FT)` | F/T - FT | E/F/T | FT/DE |
+| `LD H,(-FT)` | F/T - FT | H/F/T | FT/HL |
+| `LD L,(-FT)` | F/T - FT | L/F/T | FT/HL |
+| `LD (-FT),B` | F/T/B - FT/BC | F/T | FT |
+| `LD (-FT),C` | F/T/C - FT/BC | F/T | FT |
+| `LD (-FT),D` | F/T/D - FT/DE | F/T | FT |
+| `LD (-FT),E` | F/T/E - FT/DE | F/T | FT |
+| `LD (-FT),H` | F/T/H - FT/HL | F/T | FT |
+| `LD (-FT),L` | F/T/L - FT/HL | F/T | FT |
 
 **Expansions:**
 - `LD R8, (FT+)` → `LD R8, (FT)` / `ADD FT, 1`
@@ -2011,22 +2011,22 @@ Supported for any 16-bit register pair (`FT`, `BC`, `DE`, `HL`).
 
 | Instruction | Reads | Writes | Clobbers |
 |---|---|---|---|
-| `lio t,(ft+)` | F/T - FT | F/T | FT |
-| `lio t,(bc+)` | B/C - BC | T/B/C | FT/BC |
-| `lio t,(de+)` | D/E - DE | T/D/E | FT/DE |
-| `lio t,(hl+)` | H/L - HL | T/H/L | FT/HL |
-| `lio (ft+),t` | F/T - FT | F/T | FT |
-| `lio (bc+),t` | T/B/C - FT/BC | B/C | BC |
-| `lio (de+),t` | T/D/E - FT/DE | D/E | DE |
-| `lio (hl+),t` | T/H/L - FT/HL | H/L | HL |
-| `lio t,(-ft)` | F/T - FT | F/T | FT |
-| `lio t,(-bc)` | B/C - BC | T/B/C | FT/BC |
-| `lio t,(-de)` | D/E - DE | T/D/E | FT/DE |
-| `lio t,(-hl)` | H/L - HL | T/H/L | FT/HL |
-| `lio (-ft),t` | F/T - FT | F/T | FT |
-| `lio (-bc),t` | B/C - BC | B/C | BC |
-| `lio (-de),t` | T/D/E - FT/DE | D/E | DE |
-| `lio (-hl),t` | T/H/L - FT/HL | H/L | HL |
+| `LIO T,(FT+)` | F/T - FT | F/T | FT |
+| `LIO T,(BC+)` | B/C - BC | T/B/C | FT/BC |
+| `LIO T,(DE+)` | D/E - DE | T/D/E | FT/DE |
+| `LIO T,(HL+)` | H/L - HL | T/H/L | FT/HL |
+| `LIO (FT+),T` | F/T - FT | F/T | FT |
+| `LIO (BC+),T` | T/B/C - FT/BC | B/C | BC |
+| `LIO (DE+),T` | T/D/E - FT/DE | D/E | DE |
+| `LIO (HL+),T` | T/H/L - FT/HL | H/L | HL |
+| `LIO T,(-FT)` | F/T - FT | F/T | FT |
+| `LIO T,(-BC)` | B/C - BC | T/B/C | FT/BC |
+| `LIO T,(-DE)` | D/E - DE | T/D/E | FT/DE |
+| `LIO T,(-HL)` | H/L - HL | T/H/L | FT/HL |
+| `LIO (-FT),T` | F/T - FT | F/T | FT |
+| `LIO (-BC),T` | B/C - BC | B/C | BC |
+| `LIO (-DE),T` | T/D/E - FT/DE | D/E | DE |
+| `LIO (-HL),T` | T/H/L - FT/HL | H/L | HL |
 
 **Expansions:** `LIO` follows the same expansion pattern as the corresponding `LD` form (above): replace `LD` with `LIO` in each line. The `IO` access-type signal is asserted through each native step.
 
@@ -2036,14 +2036,14 @@ Supported for any 16-bit register pair (`FT`, `BC`, `DE`, `HL`). `LCO` is load-o
 
 | Instruction | Reads | Writes | Clobbers |
 |---|---|---|---|
-| `lco t,(ft+)` | F/T - FT | F/T | FT |
-| `lco t,(bc+)` | B/C - BC | T/B/C | FT/BC |
-| `lco t,(de+)` | D/E - DE | T/D/E | FT/DE |
-| `lco t,(hl+)` | H/L - HL | T/H/L | FT/HL |
-| `lco t,(-ft)` | F/T - FT | F/T | FT |
-| `lco t,(-bc)` | B/C - BC | T/B/C | FT/BC |
-| `lco t,(-de)` | D/E - DE | T/D/E | FT/DE |
-| `lco t,(-hl)` | H/L - HL | T/H/L | FT/HL |
+| `LCO T,(FT+)` | F/T - FT | F/T | FT |
+| `LCO T,(BC+)` | B/C - BC | T/B/C | FT/BC |
+| `LCO T,(DE+)` | D/E - DE | T/D/E | FT/DE |
+| `LCO T,(HL+)` | H/L - HL | T/H/L | FT/HL |
+| `LCO T,(-FT)` | F/T - FT | F/T | FT |
+| `LCO T,(-BC)` | B/C - BC | T/B/C | FT/BC |
+| `LCO T,(-DE)` | D/E - DE | T/D/E | FT/DE |
+| `LCO T,(-HL)` | H/L - HL | T/H/L | FT/HL |
 
 **Expansions:** load-only subset of the `LD` pattern (above): `LCO T, (R16+)` → `LCO T, (R16)` / `ADD R16, 1`; `LCO T, (-R16)` → `ADD R16, -1` / `LCO T, (R16)`. The `CODE` access-type signal is asserted through each native step.
 
@@ -2051,8 +2051,8 @@ Supported for any 16-bit register pair (`FT`, `BC`, `DE`, `HL`). `LCO` is load-o
 
 | Instruction | Reads | Writes | Clobbers |
 |---|---|---|---|
-| `push bc-hl` | B/C/D/E/H/L - BC/DE/HL | — | — ; BC (stack)/DE (stack)/HL (stack) |
-| `pop bc-hl` | — - — | B/C/D/E/H/L | BC/DE/HL ; BC (stack)/DE (stack)/HL (stack) |
+| `PUSH BC-HL` | B/C/D/E/H/L - BC/DE/HL | — | — ; BC (stack)/DE (stack)/HL (stack) |
+| `POP BC-HL` | — - — | B/C/D/E/H/L | BC/DE/HL ; BC (stack)/DE (stack)/HL (stack) |
 
 **Expansions:**
 - `PUSH BC-HL` → `PUSHA` / `POP FT` (push all except FT)
@@ -2067,30 +2067,30 @@ Register range syntax uses `-` for ranges and `/` for individual registers. Any 
 
 | Instruction | Reads | Writes | Clobbers |
 |---|---|---|---|
-| `exg f,b` | F/B - FT/BC | F/B | FT/BC |
-| `exg f,c` | F/C - FT/BC | F/C | FT/BC |
-| `exg f,d` | F/D - FT/DE | F/D | FT/DE |
-| `exg f,e` | F/E - FT/DE | F/E | FT/DE |
-| `exg f,h` | F/H - FT/HL | F/H | FT/HL |
-| `exg f,l` | F/L - FT/HL | F/L | FT/HL |
-| `exg b,c` | B/C - BC | B/C | BC |
-| `exg b,d` | B/D - BC/DE | B/D | BC/DE |
-| `exg b,e` | B/E - BC/DE | B/E | BC/DE |
-| `exg b,h` | B/H - BC/HL | B/H | BC/HL |
-| `exg b,l` | B/L - BC/HL | B/L | BC/HL |
-| `exg c,d` | C/D - BC/DE | C/D | BC/DE |
-| `exg c,e` | C/E - BC/DE | C/E | BC/DE |
-| `exg c,h` | C/H - BC/HL | C/H | BC/HL |
-| `exg c,l` | C/L - BC/HL | C/L | BC/HL |
-| `exg d,e` | D/E - DE | D/E | DE |
-| `exg d,h` | D/H - DE/HL | D/H | DE/HL |
-| `exg d,l` | D/L - DE/HL | D/L | DE/HL |
-| `exg e,h` | E/H - DE/HL | E/H | DE/HL |
-| `exg e,l` | E/L - DE/HL | E/L | DE/HL |
-| `exg h,l` | H/L - HL | H/L | HL |
-| `exg bc,de` | B/C/D/E - BC/DE | B/C/D/E | BC/DE |
-| `exg bc,hl` | B/C/H/L - BC/HL | B/C/H/L | BC/HL |
-| `exg de,hl` | D/E/H/L - DE/HL | D/E/H/L | DE/HL |
+| `EXG F,B` | F/B - FT/BC | F/B | FT/BC |
+| `EXG F,C` | F/C - FT/BC | F/C | FT/BC |
+| `EXG F,D` | F/D - FT/DE | F/D | FT/DE |
+| `EXG F,E` | F/E - FT/DE | F/E | FT/DE |
+| `EXG F,H` | F/H - FT/HL | F/H | FT/HL |
+| `EXG F,L` | F/L - FT/HL | F/L | FT/HL |
+| `EXG B,C` | B/C - BC | B/C | BC |
+| `EXG B,D` | B/D - BC/DE | B/D | BC/DE |
+| `EXG B,E` | B/E - BC/DE | B/E | BC/DE |
+| `EXG B,H` | B/H - BC/HL | B/H | BC/HL |
+| `EXG B,L` | B/L - BC/HL | B/L | BC/HL |
+| `EXG C,D` | C/D - BC/DE | C/D | BC/DE |
+| `EXG C,E` | C/E - BC/DE | C/E | BC/DE |
+| `EXG C,H` | C/H - BC/HL | C/H | BC/HL |
+| `EXG C,L` | C/L - BC/HL | C/L | BC/HL |
+| `EXG D,E` | D/E - DE | D/E | DE |
+| `EXG D,H` | D/H - DE/HL | D/H | DE/HL |
+| `EXG D,L` | D/L - DE/HL | D/L | DE/HL |
+| `EXG E,H` | E/H - DE/HL | E/H | DE/HL |
+| `EXG E,L` | E/L - DE/HL | E/L | DE/HL |
+| `EXG H,L` | H/L - HL | H/L | HL |
+| `EXG BC,DE` | B/C/D/E - BC/DE | B/C/D/E | BC/DE |
+| `EXG BC,HL` | B/C/H/L - BC/HL | B/C/H/L | BC/HL |
+| `EXG DE,HL` | D/E/H/L - DE/HL | D/E/H/L | DE/HL |
 
 **Expansions:**
 - `EXG R8, R8` → `EXG T, src` / `EXG T, dest` / `EXG T, src` (3-exchange via T)
@@ -2100,10 +2100,10 @@ Register range syntax uses `-` for ranges and `/` for individual registers. Any 
 
 | Instruction | Reads | Writes | Clobbers |
 |---|---|---|---|
-| `pick ft,i8` | F/T - FT | F/T | FT ; FT (stack) |
-| `pick bc,i8` | B/C - BC | B/C | BC ; BC (stack) |
-| `pick de,i8` | D/E - DE | D/E | DE ; DE (stack) |
-| `pick hl,i8` | H/L - HL | H/L | HL ; HL (stack) |
+| `PICK FT,I8` | F/T - FT | F/T | FT ; FT (stack) |
+| `PICK BC,I8` | B/C - BC | B/C | BC ; BC (stack) |
+| `PICK DE,I8` | D/E - DE | D/E | DE ; DE (stack) |
+| `PICK HL,I8` | H/L - HL | H/L | HL ; HL (stack) |
 
 **Expansion:**
 - `PICK R16, imm` → `LD low_reg, imm` / `PICK R16`, where `low_reg` is the low byte of `R16`.
@@ -2172,7 +2172,7 @@ See the [Examples](#examples) section below for concrete, fully-commented implem
 
 ### H and L as Loop Counters
 
-H and L are the preferred registers for `DJ` loop counters. Because HL is callee-saved, the callee must push/pop HL anyway. Using H or L as the counter means the `push`/`pop` that preserves HL also preserves the remaining iterations — no extra save/restore overhead for the counter itself.
+H and L are the preferred registers for `DJ` loop counters. Because HL is callee-saved, the callee must PUSH/POP HL anyway. Using H or L as the counter means the `PUSH`/`POP` that preserves HL also preserves the remaining iterations — no extra save/restore overhead for the counter itself.
 
 This is especially valuable when T is used as an input parameter or scratch register, and BC/DE are occupied with pointers or accumulators.
 
@@ -2192,7 +2192,7 @@ When both H and L are needed (e.g., nested loops), they can each hold a counter 
 
 #### Splitting H/L Between Counter and Accumulator
 
-The same independence lets H and L serve two *different* roles at once: one half as the `DJ` loop counter, the other half as a single-byte running value (max, min, running total's low byte, etc.). Since HL is pushed/popped as a pair regardless, this fits an entire "scan array, track one running value" function into just `push bc/hl` / `pop hl/bc` — no `DE` needed at all:
+The same independence lets H and L serve two *different* roles at once: one half as the `DJ` loop counter, the other half as a single-byte running value (max, min, running total's low byte, etc.). Since HL is pushed/popped as a pair regardless, this fits an entire "scan array, track one running value" function into just `PUSH BC/HL` / `POP HL/BC` — no `DE` needed at all:
 
 ```
         ; T = length, BC = pointer
@@ -2283,7 +2283,7 @@ Native `EXG` exchanges T with any 8-bit register, or FT with any 16-bit register
         ; After:  B=e, D=b, E=d, T=x
 ```
 
-k registers, k exchanges, T restored. A 2-cycle `(B D)` is the 3-exchange swap: `exg t,b; exg t,d; exg t,b`. Arbitrary permutations chain disjoint cycles sequentially — T restores after each cycle, so they compose cleanly.
+k registers, k exchanges, T restored. A 2-cycle `(B D)` is the 3-exchange swap: `EXG T,B; EXG T,D; EXG T,B`. Arbitrary permutations chain disjoint cycles sequentially — T restores after each cycle, so they compose cleanly.
 
 **Byte reorganization within FT**: `EXG F,T` is native — it swaps the two bytes of FT. Use it for byte-by-byte 16-bit operations without saving to another register:
 
@@ -2333,7 +2333,7 @@ Load into T is also supported (`LD T,(FT)`) but overwrites the low byte of FT; u
 
 #### Don't: Push result after a binary stack operation
 
-Because the register IS the stack top (see [Register-Stack Architecture](#register-stack-architecture)), binary operations leave the result in the register, which is already the stack top. Adding `push ft` after the operation duplicates the result — the stack ends up one entry deeper than it should be.
+Because the register IS the stack top (see [Register-Stack Architecture](#register-stack-architecture)), binary operations leave the result in the register, which is already the stack top. Adding `PUSH FT` after the operation duplicates the result — the stack ends up one entry deeper than it should be.
 
 **Anti-pattern:**
 ```
@@ -2350,7 +2350,7 @@ Because the register IS the stack top (see [Register-Stack Architecture](#regist
         add     ft,bc        ; FT = a + b (TOS), stack: [..., a+b]
 ```
 
-The only time `push ft` is correct after an operation is when the operation is meant to *preserve* the original TOS (e.g., computing a value while keeping the stack unchanged). For standard `( a b -- result )` semantics, no push is needed.
+The only time `PUSH FT` is correct after an operation is when the operation is meant to *preserve* the original TOS (e.g., computing a value while keeping the stack unchanged). For standard `( a b -- result )` semantics, no push is needed.
 
 #### Don't: Load via T when `LD R8, (FT)` is available
 
@@ -2376,7 +2376,7 @@ When you need two consecutive bytes through `FT`:
         ld c,(ft)      ; C = *(FT+1), FT pointer preserved
 ```
 
-This is especially useful after computing a target address in `FT` where `T` held intermediate data that has already been consumed (e.g., `sub t,1` to compute an offset, then `ld c,(ft)` to read the value at that address).
+This is especially useful after computing a target address in `FT` where `T` held intermediate data that has already been consumed (e.g., `SUB T,1` to compute an offset, then `LD C,(FT)` to read the value at that address).
 
 #### Don't: Attempt any direct register-to-register transfer without T or FT
 
@@ -2387,7 +2387,7 @@ This is especially useful after computing a target address in `FT` where `T` hel
         ld      e,d             ; ILLEGAL — no such instruction exists
 ```
 
-**Every register transfer must involve `T` (8-bit) or `FT` (16-bit).** There is no opcode for moving data between any two other registers. For the canonical `T`/`FT` routing code patterns (e.g., `ld t,b` / `ld c,t`, or `ld ft,bc` / `ld de,ft`), see the [Register Transfer](#register-transfer) section and [The T Hub](#the-t-hub) in Quick Start.
+**Every register transfer must involve `T` (8-bit) or `FT` (16-bit).** There is no opcode for moving data between any two other registers. For the canonical `T`/`FT` routing code patterns (e.g., `LD T,B` / `LD C,T`, or `LD FT,BC` / `LD DE,FT`), see the [Register Transfer](#register-transfer) section and [The T Hub](#the-t-hub) in Quick Start.
 
 This is a common gotcha when copying a pointer from a callee-saved register to a scratch register. The assembler will not silently accept `LD DE, BC` — it is an illegal instruction.
 
@@ -2419,7 +2419,7 @@ When computing an offset that is already in T, avoid copying it to another regis
         ld      e,t             ; E = count - 1
 ```
 
-This pairs well with the `LD R8, (FT)` form: after `sub t,1` the low byte of FT is the offset, and `LD R8, (FT)` reads through the computed address without needing T to hold the result.
+This pairs well with the `LD R8, (FT)` form: after `SUB T,1` the low byte of FT is the offset, and `LD R8, (FT)` reads through the computed address without needing T to hold the result.
 
 ### Recursion Patterns
 
@@ -2442,7 +2442,7 @@ B is preferred because it is part of BC (already pushed/popped at function bound
 
 #### Saving Multiple Parameters with PICK
 
-When a recursive routine needs more than one parameter preserved across a recursive call, the independent register stacks are the cleanest storage. Push the parameter register, then use `PICK R16, imm` to retrieve it. Because `PICK` uses only the low byte of the register as the stack index, the immediate form is safe even with 16-bit pointer values. For example, after pushing `BC` and `DE` at function entry, `pick bc,1` restores the saved `BC` and `pick de,1` restores the saved `DE` without disturbing the stack.
+When a recursive routine needs more than one parameter preserved across a recursive call, the independent register stacks are the cleanest storage. Push the parameter register, then use `PICK R16, imm` to retrieve it. Because `PICK` uses only the low byte of the register as the stack index, the immediate form is safe even with 16-bit pointer values. For example, after pushing `BC` and `DE` at function entry, `PICK BC,1` restores the saved `BC` and `PICK DE,1` restores the saved `DE` without disturbing the stack.
 
 #### POP vs SWAP for Stack Retrieval
 
@@ -2482,7 +2482,7 @@ When combining two values where one is on the stack and one is in FT, save FT fi
         add     ft,bc           ; FT = a + b  (same as b + a)
 ```
 
-The double-swap pattern (`swap ft; ld bc,ft; swap ft; add ft,bc`) reverses the operands of `ADD` unnecessarily — addition is commutative, so the reversal wastes an instruction.
+The double-swap pattern (`SWAP FT; LD BC,FT; SWAP FT; ADD FT,BC`) reverses the operands of `ADD` unnecessarily — addition is commutative, so the reversal wastes an instruction.
 
 ## Examples
 

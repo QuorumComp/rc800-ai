@@ -19,20 +19,20 @@ Read and Write each span **two disjoint ranges**, so a naive `CMP`/`J/CC` cascad
 
 ### FLAGS Encoding
 
-Each category is assigned a `FLAGS_*` value whose set bits are distinct enough to be tested by a short `J/CC` chain ordered most-specific-first. Three "primary" composite `J/CC` conditions (`j/eq` Z, `j/ltu` C, `j/lt` N⊕V) plus a fallthrough bound the robust chain to four categories; `$08` (`FLAGS_OVERFLOW`) is not a fourth distinguishable slot since it sets N⊕V=1 just like `$04` and would collide under `j/lt` (see [Limit of the Technique](#limit-of-the-technique)):
+Each category is assigned a `FLAGS_*` value whose set bits are distinct enough to be tested by a short `J/CC` chain ordered most-specific-first. Three "primary" composite `J/CC` conditions (`J/EQ` Z, `J/LTU` C, `J/LT` N⊕V) plus a fallthrough bound the robust chain to four categories; `$08` (`FLAGS_OVERFLOW`) is not a fourth distinguishable slot since it sets N⊕V=1 just like `$04` and would collide under `J/LT` (see [Limit of the Technique](#limit-of-the-technique)):
 
 | Category | FLAGS value | Bits (C,Z,N,V) | J/CC that takes it |
 |----------|------------|-----------------|---------------------|
-| Control/NOP | `$02` (`FLAGS_EQ`) | 0,1,0,0 | `j/eq` (Z=1) |
-| Read | `$01` (`FLAGS_LTU`) | 1,0,0,0 | `j/ltu` (C=1, Z=0) |
-| Write | `$04` (`FLAGS_NEGATIVE`) | 0,0,1,0 | `j/lt` (N=1, Z=0, C=0) |
+| Control/NOP | `$02` (`FLAGS_EQ`) | 0,1,0,0 | `J/EQ` (Z=1) |
+| Read | `$01` (`FLAGS_LTU`) | 1,0,0,0 | `J/LTU` (C=1, Z=0) |
+| Write | `$04` (`FLAGS_NEGATIVE`) | 0,0,1,0 | `J/LT` (N=1, Z=0, C=0) |
 | Error | `$00` (`FLAGS_NE`) | 0,0,0,0 | none — falls through to the catch-all |
 
 Because one `F` value can satisfy multiple conditions (e.g., `$03` satisfies both `EQ` and `LTU`), the chain tests the most-specific flag first. No `FLAGS_*` value in this table triggers more than one branch:
 
-- `$02` → only `j/eq` (Z=1; C=0 so `j/ltu` skips)
-- `$01` → only `j/ltu` (Z=0 so `j/eq` skips; C=1)
-- `$04` → only `j/lt` (Z=0, C=0 so the first two skip; N=1)
+- `$02` → only `J/EQ` (Z=1; C=0 so `J/LTU` skips)
+- `$01` → only `J/LTU` (Z=0 so `J/EQ` skips; C=1)
+- `$04` → only `J/LT` (Z=0, C=0 so the first two skip; N=1)
 - `$00` → all skip → fallthrough
 
 ### Register Allocation
@@ -124,13 +124,13 @@ dispatch_opcode:
 
 | Input | Table entry | F value | Chain path | Result |
 |-------|------------|---------|------------|--------|
-| `$00` | `FLAGS_EQ` (`$02`) | Z=1 | `j/eq` taken → `.control` | `T = $00` |
-| `$05` | `FLAGS_LTU` (`$01`) | C=1 | `j/eq` skip, `j/ltu` taken → `.read` | `T = $81` |
-| `$20` | `FLAGS_EQ` (`$02`) | Z=1 | `j/eq` taken → `.control` | `T = $00` |
-| `$35` | `FLAGS_NEGATIVE` (`$04`) | N=1 | skip, skip, `j/lt` taken → `.write` | `T = $82` |
+| `$00` | `FLAGS_EQ` (`$02`) | Z=1 | `J/EQ` taken → `.control` | `T = $00` |
+| `$05` | `FLAGS_LTU` (`$01`) | C=1 | `J/EQ` skip, `J/LTU` taken → `.read` | `T = $81` |
+| `$20` | `FLAGS_EQ` (`$02`) | Z=1 | `J/EQ` taken → `.control` | `T = $00` |
+| `$35` | `FLAGS_NEGATIVE` (`$04`) | N=1 | skip, skip, `J/LT` taken → `.write` | `T = $82` |
 | `$10` | `FLAGS_NE` (`$00`) | all clear | all skip → `.error` | `T = $FF` |
-| `$80` | `FLAGS_LTU` (`$01`) | C=1 | `j/eq` skip, `j/ltu` taken → `.read` | `T = $81` |
-| `$95` | `FLAGS_NEGATIVE` (`$04`) | N=1 | skip, skip, `j/lt` taken → `.write` | `T = $82` |
+| `$80` | `FLAGS_LTU` (`$01`) | C=1 | `J/EQ` skip, `J/LTU` taken → `.read` | `T = $81` |
+| `$95` | `FLAGS_NEGATIVE` (`$04`) | N=1 | skip, skip, `J/LT` taken → `.write` | `T = $82` |
 | `$A0` | `FLAGS_NE` (`$00`) | all clear | all skip → `.error` | `T = $FF` |
 | `$FF` | `FLAGS_NE` (`$00`) | all clear | all skip → `.error` | `T = $FF` |
 
@@ -194,11 +194,11 @@ The robust construction distinguishes four categories via three "primary" compos
 
 | Slot | Condition | FLAGS value |
 |------|-----------|-------------|
-| 1 | `j/eq` (Z=1) | `$02` `FLAGS_EQ` |
-| 2 | `j/ltu` (C=1, Z=0) | `$01` `FLAGS_LTU` |
-| 3 | `j/lt` (N⊕V=1, Z=0, C=0) | `$04` `FLAGS_NEGATIVE` (V=0) |
+| 1 | `J/EQ` (Z=1) | `$02` `FLAGS_EQ` |
+| 2 | `J/LTU` (C=1, Z=0) | `$01` `FLAGS_LTU` |
+| 3 | `J/LT` (N⊕V=1, Z=0, C=0) | `$04` `FLAGS_NEGATIVE` (V=0) |
 | 4 | fallthrough | `$00` `FLAGS_NE` |
 
-Note that `j/lt` tests **N⊕V**, not N alone — so `$08` (`FLAGS_OVERFLOW`, V=1 N=0) also makes N⊕V=1 and would collide with `$04` under `j/lt`. It is not a fresh distinguishable slot.
+Note that `J/LT` tests **N⊕V**, not N alone — so `$08` (`FLAGS_OVERFLOW`, V=1 N=0) also makes N⊕V=1 and would collide with `$04` under `J/LT`. It is not a fresh distinguishable slot.
 
-Going beyond four categories is possible in principle — the ISA provides composite `J/CC` conditions (`j/le`, `j/leu`, `j/gt`, `j/gtu`, `j/ge`, `j/ne`) — but each FLAGS value must satisfy exactly one condition in the ordered chain, and bit budgeting becomes fragile fast. The practical fallback is a 16-bit jump table in code space — see [Contrast: Jump Table](#contrast-jump-table) above.
+Going beyond four categories is possible in principle — the ISA provides composite `J/CC` conditions (`J/LE`, `J/LEU`, `J/GT`, `J/GTU`, `J/GE`, `J/NE`) — but each FLAGS value must satisfy exactly one condition in the ordered chain, and bit budgeting becomes fragile fast. The practical fallback is a 16-bit jump table in code space — see [Contrast: Jump Table](#contrast-jump-table) above.

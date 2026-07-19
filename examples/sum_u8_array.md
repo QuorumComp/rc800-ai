@@ -12,7 +12,7 @@ Sums an array of 8-bit unsigned integers into a 16-bit result.
 | DE | 16-bit accumulator | Callee-saved; persists across iterations without stack traffic |
 | FT | Scratch add register | Caller-saved; each byte is zero-extended into FT, added to DE via `ADD FT,DE`, then written back |
 
-FT cannot serve as the accumulator directly because `LD T,(bc+)` clobbers its low byte. Using DE as the accumulator and FT as a temporary avoids the need for `push ft` / `pop ft` around each memory load. The pattern is: load byte into T, zero-extend F, `ADD FT,DE`, then `LD DE,FT` to store the result back.
+FT cannot serve as the accumulator directly because `LD T,(BC+)` clobbers its low byte. Using DE as the accumulator and FT as a temporary avoids the need for `PUSH FT` / `POP FT` around each memory load. The pattern is: load byte into T, zero-extend F, `ADD FT,DE`, then `LD DE,FT` to store the result back.
 
 ```
 ; --

@@ -52,7 +52,7 @@ Five parameters: three fit in registers (T, BC, DE), two spill to the HL stack (
         ; FT = result
 ```
 
-**Stack layout after `jal` (callee entry):**
+**Stack layout after `JAL` (callee entry):**
 
 ```
   HL (index 0, SP)   = return address

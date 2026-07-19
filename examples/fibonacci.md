@@ -1,6 +1,6 @@
 # Recursive Fibonacci: u8 Input, u16 Result
 
-Computes the nth Fibonacci number recursively. Demonstrates recursion on the RC800: saving parameters in callee-saved registers, using the FT stack to preserve intermediate results across calls, and the `swap` idiom for retrieving stacked values.
+Computes the nth Fibonacci number recursively. Demonstrates recursion on the RC800: saving parameters in callee-saved registers, using the FT stack to preserve intermediate results across calls, and the `SWAP` idiom for retrieving stacked values.
 
 ### Register Allocation
 
@@ -11,7 +11,7 @@ Computes the nth Fibonacci number recursively. Demonstrates recursion on the RC8
 | FT | Return value / accumulator | Caller-saved; result returned here, also used to stack fib(n-1) |
 | BC | fib(n-2) during final add | Callee-saved; holds one operand while the other is in FT |
 
-After `jal fibonacci` returns `fib(n-2)` in FT, the FT stack top holds `fib(n-1)`. Saving FT into BC then swapping retrieves `fib(n-1)` into FT — no `pick` needed, just one native `swap`.
+After `JAL fibonacci` returns `fib(n-2)` in FT, the FT stack top holds `fib(n-1)`. Saving FT into BC then swapping retrieves `fib(n-1)` into FT — no `PICK` needed, just one native `SWAP`.
 
 ### Limits
 

@@ -42,7 +42,7 @@ B receives E's value, D receives B's, E receives D's. This is a 3-cycle `(B D E)
         ; Result:  B=$33, D=$11, E=$22, T=x
 ```
 
-k-cycle = k exchanges. A 2-cycle `(B D)` is the 3-exchange swap: `exg t,b; exg t,d; exg t,b`. Arbitrary permutations decompose into disjoint cycles and chain them sequentially — T restores after each cycle.
+k-cycle = k exchanges. A 2-cycle `(B D)` is the 3-exchange swap: `EXG T,B; EXG T,D; EXG T,B`. Arbitrary permutations decompose into disjoint cycles and chain them sequentially — T restores after each cycle.
 
 ### Swap B and E via T
 
@@ -96,14 +96,14 @@ Exchange the top two entries of the FT stack with the top two of the BC stack. A
 | Step | FT | FT'[1] | BC | BC'[1] |
 |------|----|--------|----|--------|
 | Start | $0001 | $0002 | $0003 | $0004 |
-| `swap ft` | $0002 | $0001 | $0003 | $0004 |
-| `exg ft,bc` | $0003 | $0001 | $0002 | $0004 |
-| `swap ft` | $0001 | $0003 | $0002 | $0004 |
-| `swap bc` | $0001 | $0003 | $0004 | $0002 |
-| `exg ft,bc` | $0004 | $0003 | $0001 | $0002 |
-| `swap ft` | $0003 | $0004 | $0001 | $0002 |
+| `SWAP FT` | $0002 | $0001 | $0003 | $0004 |
+| `EXG FT,BC` | $0003 | $0001 | $0002 | $0004 |
+| `SWAP FT` | $0001 | $0003 | $0002 | $0004 |
+| `SWAP BC` | $0001 | $0003 | $0004 | $0002 |
+| `EXG FT,BC` | $0004 | $0003 | $0001 | $0002 |
+| `SWAP FT` | $0003 | $0004 | $0001 | $0002 |
 
-The pattern alternates `swap` and `exg` to walk both stacks in lockstep, exchanging corresponding entries. The final `swap ft` restores correct ordering.
+The pattern alternates `SWAP` and `EXG` to walk both stacks in lockstep, exchanging corresponding entries. The final `SWAP FT` restores correct ordering.
 
 ### Trace with 32-bit values
 

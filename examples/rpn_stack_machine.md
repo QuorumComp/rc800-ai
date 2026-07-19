@@ -29,15 +29,15 @@ conventional push. `POP FT` drops TOS and loads the next value — it is Forth's
 
 | Forth word | Stack effect | RC800 | Cycles |
 |---|---|---|---|
-| `dup` | `( a -- a a )` | `push ft` | 4 |
-| `drop` | `( a -- )` | `pop ft` | 4 |
-| `swap` | `( a b -- b a )` | `swap ft` | 4 |
-| `over` | `( a b -- a b a )` | `push ft` / `pick ft,2` | 8 |
-| `nip` | `( a b -- b )` | `swap ft` / `pop ft` | 8 |
-| `tuck` | `( a b -- b a b )` | `swap ft` / `push ft` / `pick ft,2` | 12 |
-| `2dup` | `( a b -- a b a b )` | `push ft` / `push ft` | 8 |
+| `dup` | `( a -- a a )` | `PUSH FT` | 4 |
+| `drop` | `( a -- )` | `POP FT` | 4 |
+| `swap` | `( a b -- b a )` | `SWAP FT` | 4 |
+| `over` | `( a b -- a b a )` | `PUSH FT` / `PICK FT,2` | 8 |
+| `nip` | `( a b -- b )` | `SWAP FT` / `POP FT` | 8 |
+| `tuck` | `( a b -- b a b )` | `SWAP FT` / `PUSH FT` / `PICK FT,2` | 12 |
+| `2dup` | `( a b -- a b a b )` | `PUSH FT` / `PUSH FT` | 8 |
 | `rot` | `( a b c -- b c a )` | 6 instructions via BC | 24 |
-| `n@` | `( ... n -- ... n )` | `pick ft,n` | 4 |
+| `n@` | `( ... n -- ... n )` | `PICK FT,n` | 4 |
 
 `PICK FT` uses the low byte of FT as the stack index. Index 0 is the register
 itself (TOS), index 1 is the last pushed value, index 2 is the one before that.
@@ -687,13 +687,13 @@ Additional Forth words that compose from the primitives:
 
 | Forth word | Stack effect | Implementation | Cycles |
 |---|---|---|---|
-| `2drop` | `( a b -- )` | `pop ft` / `pop ft` | 8 |
-| `2dup` | `( a b -- a b a b )` | `push ft` / `push ft` | 8 |
+| `2drop` | `( a b -- )` | `POP FT` / `POP FT` | 8 |
+| `2dup` | `( a b -- a b a b )` | `PUSH FT` / `PUSH FT` | 8 |
 | `2swap` | `( a b c d -- c d a b )` | requires complex implementation via BC/DE/HL | 60+ |
-| `nip` | `( a b -- b )` | `swap ft` / `pop ft` | 8 |
-| `tuck` | `( a b -- b a b )` | `push ft` / `swap ft` | 8 |
-| `pick` | `( xn...x1 x0 n -- xn...x1 x0 xn )` | `push ft` then `pick ft,n` | 8+ |
-| `?dup` | `( n -- n\|0 n\|0 )` | `push ft` / `tst ft` / `pop/ne ft` | 12 |
+| `nip` | `( a b -- b )` | `SWAP FT` / `POP FT` | 8 |
+| `tuck` | `( a b -- b a b )` | `PUSH FT` / `SWAP FT` | 8 |
+| `pick` | `( xn...x1 x0 n -- xn...x1 x0 xn )` | `PUSH FT` then `PICK FT,n` | 8+ |
+| `?dup` | `( n -- n\|0 n\|0 )` | `PUSH FT` / `TST FT` / `POP/NE FT` | 12 |
 | `depth` | `( ... -- ... n )` | `LCR T,(C)` with C=RC8_SP_FT, then `NOT T` | 12 |
 
 `DEPTH` reads the FT stack pointer via `LCR` and inverts it to get the number
