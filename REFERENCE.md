@@ -227,7 +227,7 @@ Sections are not aligned to any particular multiple.
 
 The F register is fully writable, not just set by the ALU. This enables several patterns:
 
-- **Force condition codes**: `LD F, 0` sets EQ/Z, `LD F, $FF` sets NE/NZ.
+- **Force condition codes**: `LD F, 0` clears Z (NE/NZ), `LD F, $02` sets Z (EQ/Z).
 - **F as carry lane for byte math**: There is no native "add with carry" instruction and no arithmetic instruction that updates the F register as a flag side effect. Only `CMP` and `TST` set F, and they do not produce an arithmetic result. To obtain a carry-out from an addition, use a 16-bit `ADD` on zero-extended 8-bit operands.
 
   Treat `FT` as a 16-bit temporary where `T` is bits 7:0 and `F` is bits 15:8. To add two unsigned 8-bit numbers in `T` and `C`:
@@ -670,7 +670,7 @@ Firmware convention defines these named constants (from `rc800.i`):
 | `FLAGS_EQ` | $02 | Alias for FLAGS_Z (equal) |
 | `FLAGS_LTU` | $01 | Alias for FLAGS_CARRY (unsigned less than) |
 
-Common values: `LD F, 0` = EQ/Z, `LD F, $FF` = NE/NZ, `LD F, $04` = LT/N.
+Common values: `LD F, 0` clears Z (NE/NZ), `LD F, $02` sets Z (EQ/Z), `LD F, $04` sets N (LT/N).
 
 | Code | Meaning | Alt |
 |------|---------|-----|
