@@ -1567,7 +1567,6 @@ For the 16-bit/8-bit register mapping and clobber-checking rules, see [Register 
 | `ADD T,E` | T/E - FT/DE | T | FT |
 | `ADD T,H` | T/H - FT/HL | T | FT |
 | `ADD T,L` | T/L - FT/HL | T | FT |
-| `ADD FT,FT` | F/T - FT | F/T | FT |
 | `ADD FT,BC` | F/T/B/C - FT/BC | F/T | FT |
 | `ADD FT,DE` | F/T/D/E - FT/DE | F/T | FT |
 | `ADD FT,HL` | F/T/H/L - FT/HL | F/T | FT |

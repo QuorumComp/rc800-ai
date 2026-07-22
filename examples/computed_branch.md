@@ -147,8 +147,8 @@ A 16-bit jump table in code space (`DW` entries) is the natural alternative when
 | Dimension | FLAGS table | Jump table |
 |---|---|---|
 | Table size | 256 bytes (1 byte/entry) | 512 bytes (2 bytes/entry) |
-| Step count | `LCO` + `LD F,T` + `J/CC` chain (3 + chain) | `ADD FT,FT` (double index) + `LD HL,(FT+)` + `J (HL)` |
-| Index doubling | none (1 byte/entry → `ADD FT,BC`) | required (no `ADD BC,BC`; double via `LD FT,BC`/`ADD FT,FT`/`LD BC,FT`) |
+| Step count | `LCO` + `LD F,T` + `J/CC` chain (3 + chain) | `LS FT,1` (double index) + `LD HL,(FT+)` + `J (HL)` |
+| Index doubling | none (1 byte/entry → `ADD FT,BC`) | required (no `ADD BC,BC`; double via `LD FT,BC`/`LS FT,1`/`LD BC,FT`) |
 | Categories | ≤4 (three primary `J/CC` + fallthrough) | unlimited |
 | Handler addressing | indirect via a `J/CC` label in the dispatcher | each entry stores the handler's own address |
 | HL clobber | none (`J (HL)` is only the final return) | `LD HL,(FT+)` clobbers HL; the dispatcher's own `PUSH HL` return path must be preserved separately |
