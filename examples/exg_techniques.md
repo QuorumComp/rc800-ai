@@ -107,17 +107,17 @@ The pattern alternates `SWAP` and `EXG` to walk both stacks in lockstep, exchang
 
 ### Trace with 32-bit values
 
-When FT:FT' holds a 32-bit value (low word in FT, high word in FT'), this pattern swaps two 32-bit values between the FT and BC stacks:
+When FT:FT' holds a 32-bit value (high word in FT, low word in FT'), this pattern swaps two 32-bit values between the FT and BC stacks:
 
 ```
-        ; FT:FT' = $00020001 (32-bit value, little-endian)
-        ; BC:BC' = $00040003 (32-bit value, little-endian)
+        ; FT:FT' = $00010002 (high word $0001 in FT, low word $0002 in FT')
+        ; BC:BC' = $00030004 (high word $0003 in BC, low word $0004 in BC')
         swap    ft              ; FT=$0002
         exg     ft,bc           ; FT=$0003, BC=$0002
         swap    ft              ; FT=$0001, FT'[1]=$0003
         swap    bc              ; BC=$0004, BC'[1]=$0002
         exg     ft,bc           ; FT=$0004, BC=$0001
         swap    ft              ; FT=$0003, FT'[1]=$0004
-        ; FT:FT' = $00040003
-        ; BC:BC' = $00020001
+        ; FT:FT' = $00030004
+        ; BC:BC' = $00010002
 ```

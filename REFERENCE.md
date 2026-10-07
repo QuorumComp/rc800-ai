@@ -146,9 +146,7 @@ main:
 
 ### Register List Syntax
 
-- **Range syntax** (`-`): `PUSH BC-HL` pushes BC, DE, HL (expands to `PUSHA` / `POP FT`). `POP BC-HL` pops them (expands to `POPA` / `PUSH FT`).
-- **List syntax** (`/`): `PUSH BC/DE` pushes only BC and DE individually (two `PUSH` instructions). `POP BC/DE` pops them in reverse order.
-- Any combination is accepted: `PUSH FT/HL`, `PUSH BC-DE`, etc.
+- **List syntax** (`/`): `PUSH BC/DE` pushes only BC and DE individually (two `PUSH` instructions). `POP BC/DE` pops them in reverse order. `PUSH BC/DE/HL` pushes all three (expands to `PUSHA` / `POP FT`). `POP BC/DE/HL` pops them (expands to `POPA` / `PUSH FT`).
 
 ### Addressing Forms
 
@@ -452,10 +450,10 @@ During this sequence, `T`, `F`, `BC`, and `FT` are all modified at various point
 ### 32-Bit Value Convention (`ft:ft'`)
 
 The FT stack is the standard mechanism for multi-word values. A 32-bit value is stored as:
-- **FT** (register) = low word
-- **FT'** (top of FT stack, accessed via `SWAP FT`) = high word
+- **FT** (register) = high word (most significant)
+- **FT'** (top of FT stack, accessed via `SWAP FT`) = low word
 
-Little-endian on the stack: the low word is always in the register, the high word is one `SWAP` away. This convention is used by the calling convention for multi-word parameters and return values.
+The high word is always in the register, the low word is one `SWAP` away. This matches the [calling convention](StandardCallingConvention.md) for multi-word parameters and return values ("MSW in R, next word in R'").
 
 ### Register Stacks
 
@@ -595,15 +593,16 @@ See [`rpn_stack_machine.md`](examples/rpn_stack_machine.md) for a complete RPN c
 
 ### Register Stack Patterns
 
-**`SWAP FT` as 32-bit accessor**: `SWAP FT` exchanges FT with the top of the FT stack. This is the primary way to access the high word of a 32-bit value:
+**`SWAP FT` as 32-bit accessor**: `SWAP FT` exchanges FT with the top of the FT stack. Since the high word lives in FT and the low word on the stack, `SWAP FT` is the way to access the low word of a 32-bit value:
 
 ```
         ld ft,$1234        ; low word
-        push ft
-        ld ft,$5678        ; high word
-        swap ft            ; ft = $5678 (high word), $1234 on stack
-        ; ... work with high word ...
-        swap ft            ; ft = $1234 (low word), $5678 on stack
+        push ft            ; stack[1] = low word
+        ld ft,$5678        ; FT = high word
+        ; FT:FT' = $56781234 — high word in FT, low word one SWAP away
+        swap ft            ; FT = $1234 (low word), $5678 on stack
+        ; ... work with low word ...
+        swap ft            ; FT = $5678 (high word), $1234 on stack
 ```
 
 **`PICK R16, imm` assembler shorthand**: The assembler accepts an immediate index: `PICK FT, 2` loads stack entry 2 directly into FT, without setting FT to the index value first. Index 0 = the register itself (current top), index 1 = the last pushed value, index 2 = the one before that.
@@ -2050,17 +2049,17 @@ Supported for any 16-bit register pair (`FT`, `BC`, `DE`, `HL`). `LCO` is load-o
 
 | Instruction | Reads | Writes | Clobbers |
 |---|---|---|---|
-| `PUSH BC-HL` | B/C/D/E/H/L - BC/DE/HL | — | — ; BC (stack)/DE (stack)/HL (stack) |
-| `POP BC-HL` | — - — | B/C/D/E/H/L | BC/DE/HL ; BC (stack)/DE (stack)/HL (stack) |
+| `PUSH BC/DE/HL` | B/C/D/E/H/L - BC/DE/HL | — | — ; BC (stack)/DE (stack)/HL (stack) |
+| `POP BC/DE/HL` | — - — | B/C/D/E/H/L | BC/DE/HL ; BC (stack)/DE (stack)/HL (stack) |
 
 **Expansions:**
-- `PUSH BC-HL` → `PUSHA` / `POP FT` (push all except FT)
-- `POP BC-HL` → `POPA` / `PUSH FT` (pop all except FT)
+- `PUSH BC/DE/HL` → `PUSHA` / `POP FT` (push all except FT)
+- `POP BC/DE/HL` → `POPA` / `PUSH FT` (pop all except FT)
 - `PUSH R16/R16` → individual `PUSH` per listed register
 - `POP R16/R16` → individual `POP` per listed register
 - `SWAP R16/R16` → individual `SWAP` per listed register
 
-Register range syntax uses `-` for ranges and `/` for individual registers. Any combination is accepted, e.g., `PUSH FT/HL`, `PUSH BC-HL`, `PUSH BC-DE`.
+Register lists use `/` to separate registers, e.g., `PUSH FT/HL`, `PUSH BC/DE/HL`.
 
 #### EXG Register-to-Register (not involving T/FT)
 

@@ -706,7 +706,8 @@ SP manipulation.
   stack; BC, DE, and HL stacks are independent and can be used for additional
   storage.
 - **Multiply**: produces only the low 16-bit word of the product. Full 32-bit
-  multiply requires the `ft:ft'` convention with `SWAP FT` for the high word.
+  multiply requires the `ft:ft'` convention (high word in FT, low word in FT');
+  `SWAP FT` reaches the low word.
 - **Division**: the subtraction-based version is O(quotient). For better
   performance, implement binary restoring division (16 iterations regardless
   of quotient magnitude).
