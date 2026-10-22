@@ -679,8 +679,8 @@ Common values: `LD F, 0` clears Z (NE/NZ), `LD F, $02` sets Z (EQ/Z), `LD F, $04
 | GE | Signed greater than or equal | not (N xor V) |
 | LEU | Unsigned less than or equal | Z or C |
 | GTU | Unsigned greater than | not (Z or C) |
-| LTU | Unsigned less than | C (carry) |
-| GEU | Unsigned greater than or equal | NC (not carry) |
+| LTU (or CS) | Unsigned less than | C (carry set) |
+| GEU (or CC) | Unsigned greater than or equal | not C (carry clear) |
 | EQ | Equal | Z (zero) |
 | NE | Not equal | NZ (not zero) |
 
@@ -1467,7 +1467,7 @@ else
 ```
 Opcode: `1001CCrr` (CC < 10)
 
-For the meanings of the condition codes (`LE`, `GT`, `LT`, `GE`, `LEU`, `GTU`, `LTU`, `GEU`, `EQ`/`Z`, `NE`/`NZ`), see the [Condition Codes](#condition-codes) section.
+For the meanings of the condition codes (`LE`, `GT`, `LT`, `GE`, `LEU`, `GTU`, `LTU`/`CS`, `GEU`/`CC`, `EQ`/`Z`, `NE`/`NZ`), see the [Condition Codes](#condition-codes) section.
 
 #### DJ R8, s8
 Decrement register, jump if non-zero. **Important:** DJ decrements *first*, then tests. Load the exact iteration count into the register before the loop — do not pre-decrement.
@@ -1792,7 +1792,7 @@ For the 16-bit/8-bit register mapping and clobber-checking rules, see [Register 
 - **Reads/Writes/Clobbers notation**: see [How to read the Native Instruction Table](#how-to-read-the-native-instruction-table) for column definitions and a worked `CMP B,I8` example.
 - **Stack operations in the table:** For `PUSH R16`, the **Reads** column lists the two bytes of the 16-bit register that is pushed as a single word. The `; R16 (stack)` side effect in the **Clobbers** column means the value is duplicated onto that register's independent 16-bit stack. For `POP R16`, the **Writes** column lists the two bytes that are updated when the popped 16-bit word is loaded back into the register, and the **Clobbers** column lists the affected parent pair. `PUSHA`/`POPA` do the same for all four pairs at once.
 - **Stack operation semantics** (`PUSH`/`POP`/`SWAP`/`PICK`): see [Register Stacks](#register-stacks) and the [PUSH](#push-r16)/[POP](#pop-r16)/[SWAP](#swap-r16)/[PICK](#pick-r16) instruction subsections.
-- **J/CC condition codes**: `LE`, `GT`, `LT`, `GE` (signed), `LEU`, `GTU`, `LTU`, `GEU` (unsigned), `EQ`/`Z` (equal), `NE`/`NZ` (not equal). All read F to evaluate the condition.
+- **J/CC condition codes**: `LE`, `GT`, `LT`, `GE` (signed), `LEU`, `GTU`, `LTU`/`CS`, `GEU`/`CC` (unsigned), `EQ`/`Z` (equal), `NE`/`NZ` (not equal). All read F to evaluate the condition.
 - **LIO/LCO**: Assert IO or CODE signal respectively during the memory access.
 - **LCO** has no store form (only load).
 - **DJ** decrements the register first, then tests for zero. The register is listed in the **Writes** column because it is always modified; `PC` is listed after `;` in the **Clobbers** column because it may be modified.
