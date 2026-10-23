@@ -1,6 +1,6 @@
 # PICK as O(1) Lookup Table
 
-`PICK R16` uses the register's own low byte as a stack index, giving direct random access to previously pushed values. Pre-load a table onto any register stack, then index into it in constant time — no loop, no pointer arithmetic. The pattern pays off when the table replaces a genuinely expensive per-element computation inside a tight loop, and the one-time setup cost is amortized across enough iterations.
+`PICK R16` reads its stack index from `T`, giving direct random access to previously pushed values. Pre-load a table onto any register stack, then index into it in constant time — no loop, no pointer arithmetic. The pattern pays off when the table replaces a genuinely expensive per-element computation inside a tight loop, and the one-time setup cost is amortized across enough iterations.
 
 ### Register Allocation
 
@@ -36,7 +36,7 @@ A 16-entry nibble-popcount table collapses the inner loop to two `PICK` lookups 
 ; -- Notes:
 ; --   Without the table, each byte requires an 8-iteration shift-and-test
 ; --   inner loop (~352 cycles/byte).  The 16-entry table reduces per-byte
-; --   cost to 18 native instructions (72 cycles/byte), a ~4.9x speedup at
+; --   cost to 16 native instructions (64 cycles/byte), a ~5.5x speedup at
 ; --   N=255.  Setup costs 128 cycles: the first LD DE sets D=0 so later
 ; --   entries only need LD E,xx, and consecutive equal entries share one
 ; --   LD (the second just pushes the unchanged register).  Break-even at
@@ -92,8 +92,7 @@ popcount_array:
 .loop
         ld      t,(bc+)         ; T = next byte, BC advanced (2 native: ld+add)
         ld      f,t             ; F = byte (stash for high nibble)
-        and     t,$0F           ; T = low nibble
-        ld      e,t             ; E = low nibble (PICK index)
+        and     t,$0F           ; T = low nibble = PICK index
         pick    de              ; E = popcount(low nibble)
 
         ld      t,l             ; T = running total
@@ -102,8 +101,7 @@ popcount_array:
 
         ld      t,f             ; T = byte (recover from stash)
         ld      f,0             ; FT = $00:byte
-        rs      ft,4            ; T = high nibble
-        ld      e,t             ; E = high nibble (PICK index)
+        rs      ft,4            ; T = high nibble = PICK index
         pick    de              ; E = popcount(high nibble)
 
         ld      t,l             ; T = running total
@@ -130,20 +128,20 @@ The table approach pays a one-time setup cost (building the 15-entry table) that
 | Approach | Setup | Per-byte | Total for N bytes |
 |----------|------:|---------:|-------------------|
 | Naive (8-iteration shift-and-test per byte) | 0 | ~352 | 352N |
-| Table (two PICK lookups per byte) | 128 | 72 | 128 + 72N |
+| Table (two PICK lookups per byte) | 128 | 64 | 128 + 64N |
 
 Setup is 28 native instructions (112 cycles) for the table build plus 4 instructions (16 cycles) for `LCR` cleanup. Two optimizations cut the build from 46 to 28 instructions: the first `LD DE,$0004` establishes `D=0` so later entries only need `LD E,xx` (1 instruction, not 2), and consecutive equal popcount values share one `LD` — the second entry just pushes the unchanged register (entries 13, 9, 5, 1).
 
-Break-even at 128 + 72N = 352N, i.e. **N = 1**. The table wins for any valid input (the function requires N >= 1). The speedup grows with N:
+Break-even at 128 + 64N = 352N, i.e. **N &lt; 1**. The table wins for any valid input (the function requires N >= 1). The speedup grows with N:
 
 | N | Naive | Table | Speedup |
 |---|------:|------:|--------:|
-| 1 | 352 | 200 | 1.8x |
-| 10 | 3520 | 848 | 4.2x |
-| 100 | 35200 | 7328 | 4.8x |
-| 255 | 89760 | 18488 | 4.9x |
+| 1 | 352 | 192 | 1.8x |
+| 10 | 3520 | 768 | 4.6x |
+| 100 | 35200 | 6528 | 5.4x |
+| 255 | 89760 | 16448 | 5.5x |
 
-The naive per-byte cost is dominated by the 8-iteration inner loop (10 instructions/bit: recover byte, mask bit 0, stash result, route accumulator through T, shift byte, update stash, `DJ`). The table approach replaces all 80 inner-loop instructions with 16 (two lookups + two accumulator round-trips), at the cost of 128 cycles of one-time setup.
+The naive per-byte cost is dominated by the 8-iteration inner loop (10 instructions/bit: recover byte, mask bit 0, stash result, route accumulator through T, shift byte, update stash, `DJ`). The table approach replaces all 80 inner-loop instructions with 16 (two lookups, where the nibble in `T` is the index, plus two accumulator round-trips), at the cost of 128 cycles of one-time setup.
 
 ### When to Use
 
@@ -155,5 +153,6 @@ The naive per-byte cost is dominated by the 8-iteration inner loop (10 instructi
 
 - **Setup cost**: building the table requires one `PUSH` per entry (4 cycles each). Amortize by building once and reusing across calls, or by ensuring the loop runs enough iterations to recover the cost.
 - **Cleanup is cheap**: table entries are discarded in 3 instructions via `LCR` stack pointer adjustment, not N individual `POP`s. See [LCR Stack Pointer Manipulation](lcr_stack_pointer.md).
-- **Index range**: limited to 0-255 per stack (the register's low byte). For larger tables, use memory-based lookup with pointer arithmetic instead.
+- **Index range**: limited to 0-255 per stack (the index is the 8-bit `T`). For larger tables, use memory-based lookup with pointer arithmetic instead.
+- **Index lives in `T`**: here the nibble is already in `T` when the lookup runs, so no transfer instruction is needed. `PICK` leaves `T` untouched for `r` != `FT`, so the index survives the lookup — but any step that routes through FT destroys it.
 - **Read-only**: `PICK` reads the stack but does not modify it. To update an entry, `PICK` it into the register, modify, then `PUSH` the new value and adjust depth.

@@ -39,10 +39,11 @@ conventional push. `POP FT` drops TOS and loads the next value — it is Forth's
 | `rot` | `( a b c -- b c a )` | 6 instructions via BC | 24 |
 | `n@` | `( ... n -- ... n )` | `PICK FT,n` | 4 |
 
-`PICK FT` uses the low byte of FT as the stack index. Index 0 is the register
-itself (TOS), index 1 is the last pushed value, index 2 is the one before that.
-The assembler immediate form `PICK FT,n` loads the index and executes in two
-instructions.
+`PICK` reads its index from `T`; for the FT stack that is the low byte of the
+value being picked. Index 0 is the register itself (TOS), index 1 is the last
+pushed value, index 2 is the one before that. The assembler immediate form
+`PICK FT,n` loads the index and executes in two instructions (`LD T,n` /
+`PICK FT`).
 
 ### The Operand Pattern
 

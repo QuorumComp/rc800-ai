@@ -462,7 +462,7 @@ Each 16-bit register pair has its own 256-word (16-bit word) on-chip stack. The 
 - **PUSH r** — duplicates top value, decrements stack pointer
 - **POP r** — increments stack pointer, loads new top into register
 - **SWAP r** — exchanges register with next stack entry
-- **PICK r** — replaces register with entry at index (index = current register value & 0xFF). Index 0 = the register itself (current top), index 1 = the last pushed value, index 2 = the one before that, and so on.
+- **PICK r** — replaces register with entry at index, where the index is read from `T` whatever the target stack is. Index 0 = the register itself (current top), index 1 = the last pushed value, index 2 = the one before that, and so on. Loading the index with `LD T,n` writes FT — and the FT stack top, which is the same storage.
 
 #### Stack Pointer Direction and Depth
 
@@ -528,6 +528,8 @@ This model applies to all four register stacks (FT, BC, DE, HL). Each register i
 - **`PUSH FT` followed by `SWAP FT` is a no-op.** After `PUSH FT`, both FT and `Stack[SP+1]` contain the same value. Swapping them exchanges identical values, leaving the stack unchanged. This pattern cannot be used to copy or duplicate elements.
 
 - **`PUSH FT` duplicates, it does not "push the register."** The instruction creates a copy of the current TOS on the stack below. It does not move FT to a new stack position while leaving the old position empty. After push, FT and `Stack[SP+1]` are identical.
+
+- **`PICK` takes its index from `T`, never from the named pair.** `PICK BC` reads `Stack[BC][T]` — `C` is part of the value being read, not the index. Because the index load is `LD T,n`, it writes FT and the FT stack top; park FT around it when a live value has to survive.
 
 #### Using the FT Stack for RPN Calculations
 
@@ -605,7 +607,7 @@ See [`rpn_stack_machine.md`](examples/rpn_stack_machine.md) for a complete RPN c
         swap ft            ; FT = $5678 (high word), $1234 on stack
 ```
 
-**`PICK R16, imm` assembler shorthand**: The assembler accepts an immediate index: `PICK FT, 2` loads stack entry 2 directly into FT, without setting FT to the index value first. Index 0 = the register itself (current top), index 1 = the last pushed value, index 2 = the one before that.
+**`PICK FT, imm` assembler shorthand**: The assembler accepts an immediate index for FT: `PICK FT, 2` is `LD T,2` / `PICK FT`. Index 0 = the register itself (current top), index 1 = the last pushed value, index 2 = the one before that. For BC, DE and HL the immediate form is rejected — the implicit `LD T,imm` would clobber FT — so write the index load yourself (`LD T,2` / `PICK BC`).
 
 **Byte-by-byte operations using `EXG F,T`**: When performing 16-bit operations byte-by-byte on FT, use `EXG F,T` to swap between bytes without needing to save/restore through other registers:
 
@@ -789,16 +791,20 @@ There are two strategies for accessing stack parameters. The callee should emplo
 
 **Strategy 1 — `PICK` (params stay on stack):**
 
-`PUSH HL` duplicates the return address on the HL stack, shifting params to higher indices. `PICK HL,$nn` reads a parameter at a fixed index without disturbing the return address. Parameters remain on the stack and can be re-read at any time — useful when a param is accessed multiple times or conditionally.
+`PUSH HL` duplicates the return address on the HL stack, shifting params to higher indices. `LD T,$nn` followed by `PICK HL` reads a parameter at a fixed index without disturbing the return address. Parameters remain on the stack and can be re-read at any time — useful when a param is accessed multiple times or conditionally.
 
 ```
         push    hl             ; dup ret; params shift to index 2+
-        pick    hl,2           ; HL=arg1 (first stack param)
+        ld      t,2            ; index
+        pick    hl             ; HL=arg1 (first stack param)
         ld      t,l            ; T=arg1 low byte
-        pick    hl,3           ; HL=arg2
+        ld      t,3            ; index
+        pick    hl             ; HL=arg2
         ld      t,l
         ; ... params remain on stack for later access ...
 ```
+
+The index is read from `T`, so each `LD T,$nn` clobbers FT and the FT stack top (same storage). FT is caller-saved and the parameter is read out of HL immediately, so nothing is lost here; park FT around the index load when a live `FT:FT'` pair must survive.
 
 **Strategy 2 — swap-pop (params consumed as accessed):**
 
@@ -895,8 +901,9 @@ f:
         push    hl             ; save ret on HL stack
         push    bc/de          ; callee-saved
 
-        ; PICK each stack param at fixed index
-        pick    hl,2           ; HL=arg1
+        ; PICK each stack param at fixed index (index in T, clobbers FT)
+        ld      t,2            ; index
+        pick    hl             ; HL=arg1
         ; ... body: compute result in FT ...
 
         push    ft             ; save result
@@ -1412,9 +1419,9 @@ Swap FT, BC, DE, HL with their respective next stack entries
 Opcode: `11001100`
 
 #### PICK R16
-Replace register (stack top) with stack entry at index (index = register value & 0xFF). Index 0 = the register itself (current top), index 1 = the last pushed value, index 2 = the entry before that, and so on deeper into the stack. After PICK, the register holds the picked value and thus becomes the new stack top.
+Replace register (stack top) with stack entry at index, where the index is read from `T` whatever the target stack is. Index 0 = the register itself (current top), index 1 = the last pushed value, index 2 = the entry before that, and so on deeper into the stack. After PICK, the register holds the picked value and thus becomes the new stack top. `T` is read but not written; the stack pointer is unchanged.
 ```
-R16 <- Stack[r][R16 & 0xFF]
+R16 <- Stack[r][T]
 ```
 Opcode: `000111rr`
 
@@ -1751,9 +1758,9 @@ For the 16-bit/8-bit register mapping and clobber-checking rules, see [Register 
 | `SWAP HL` | H/L - HL | H/L | HL ; HL (stack) |
 | `SWAPA` | F/T/B/C/D/E/H/L - FT/BC/DE/HL | F/T/B/C/D/E/H/L | FT/BC/DE/HL ; FT (stack)/BC (stack)/DE (stack)/HL (stack) |
 | `PICK FT` | F/T - FT | F/T | FT ; FT (stack) |
-| `PICK BC` | B/C - BC | B/C | BC ; BC (stack) |
-| `PICK DE` | D/E - DE | D/E | DE ; DE (stack) |
-| `PICK HL` | H/L - HL | H/L | HL ; HL (stack) |
+| `PICK BC` | T ; B/C - BC | B/C | BC ; BC (stack) |
+| `PICK DE` | T ; D/E - DE | D/E | DE ; DE (stack) |
+| `PICK HL` | T ; H/L - HL | H/L | HL ; HL (stack) |
 | `NOP` | — - — | — | — |
 | `J S8` | — - — | — | — ; PC |
 | `J (FT)` | F/T - FT | — | — ; PC |
@@ -2099,14 +2106,16 @@ Register lists use `/` to separate registers, e.g., `PUSH FT/HL`, `PUSH BC/DE/HL
 | Instruction | Reads | Writes | Clobbers |
 |---|---|---|---|
 | `PICK FT,I8` | F/T - FT | F/T | FT ; FT (stack) |
-| `PICK BC,I8` | B/C - BC | B/C | BC ; BC (stack) |
-| `PICK DE,I8` | D/E - DE | D/E | DE ; DE (stack) |
-| `PICK HL,I8` | H/L - HL | H/L | HL ; HL (stack) |
 
 **Expansion:**
-- `PICK R16, imm` → `LD low_reg, imm` / `PICK R16`, where `low_reg` is the low byte of `R16`.
+- `PICK FT, imm` → `LD T, imm` / `PICK FT`
 
-The immediate form loads the low byte of the register pair with the index value, then executes `PICK`. This is a shorthand that avoids manually setting the register to the index value first.
+The index is read from `T`, so only FT can take an immediate index without disturbing another register pair. `PICK BC,imm`, `PICK DE,imm` and `PICK HL,imm` are rejected — the implicit `LD T,imm` would clobber FT — so spell out the two steps:
+
+```
+        ld      t,2            ; index
+        pick    bc             ; BC = entry 2 of the BC stack
+```
 
 #### Template Synthesized Instructions
 
@@ -2311,7 +2320,7 @@ See [`examples/exg_techniques.md`](examples/exg_techniques.md) for fully traced 
 
 ### Four Independent Stacks as Scratch Space
 
-The FT, BC, DE, and HL stacks are fully independent 16-bit word stacks. While BC, DE, and HL are primarily used for callee-saved register storage, each stack can serve as independent scratch space. `PUSH BC` does not affect the DE or HL stacks, so you can use one stack as a temporary buffer, another for parameter passing, and still another for loop counters — all without interfering. `PICK R16, imm` gives O(1) indexed access into any stack, and `LCR` can read or write the stack pointer directly for bulk rewind or depth queries. When data-segment memory is scarce, the register stacks are a natural place to park intermediate values that do not need to survive a function return.
+The FT, BC, DE, and HL stacks are fully independent 16-bit word stacks. While BC, DE, and HL are primarily used for callee-saved register storage, each stack can serve as independent scratch space. `PUSH BC` does not affect the DE or HL stacks, so you can use one stack as a temporary buffer, another for parameter passing, and still another for loop counters — all without interfering. `PICK R16` gives O(1) indexed access into any stack (the index is read from `T`), and `LCR` can read or write the stack pointer directly for bulk rewind or depth queries. When data-segment memory is scarce, the register stacks are a natural place to park intermediate values that do not need to survive a function return.
 
 ### LD R8,(FT) for Pointer-Safe Loads
 
@@ -2440,7 +2449,7 @@ B is preferred because it is part of BC (already pushed/popped at function bound
 
 #### Saving Multiple Parameters with PICK
 
-When a recursive routine needs more than one parameter preserved across a recursive call, the independent register stacks are the cleanest storage. Push the parameter register, then use `PICK R16, imm` to retrieve it. Because `PICK` uses only the low byte of the register as the stack index, the immediate form is safe even with 16-bit pointer values. For example, after pushing `BC` and `DE` at function entry, `PICK BC,1` restores the saved `BC` and `PICK DE,1` restores the saved `DE` without disturbing the stack.
+When a recursive routine needs more than one parameter preserved across a recursive call, the independent register stacks are the cleanest storage. Push the parameter register, then retrieve it with `PICK`, whose index lives in `T`. For example, after pushing `BC` and `DE` at function entry, `LD T,1` / `PICK BC` restores the saved `BC`, and `LD T,1` / `PICK DE` restores the saved `DE`, both without disturbing the stack. Note that each index load clobbers FT — the return register — so reload or park FT after the retrieval if the recovered values have to be combined in FT.
 
 #### POP vs SWAP for Stack Retrieval
 

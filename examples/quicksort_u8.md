@@ -126,7 +126,8 @@ partition_u8:
         ld      c,t             ; C = loop counter
 
         ; Restore base pointer and set up scan/swap pointers
-        pick    bc,1            ; BC = base (from BC stack)
+        ld      t,1             ; PICK index (clobbers T; C already holds the counter)
+        pick    bc              ; BC = base (from BC stack)
         ld      ft,bc
         ld      de,ft           ; DE = scan pointer
         ld      hl,ft           ; HL = swap pointer
@@ -160,10 +161,12 @@ partition_u8:
         ld      (de),t          ; arr[pivot_addr] = old arr[swap_idx]
 
         ; Return pivot position = swap_idx = HL - base
-        ld      ft,hl
-        pick    bc,1            ; BC = base
-        sub     ft,bc
-        ; T = swap index
+        ld      ft,hl           ; FT = swap address
+        ld      de,ft           ; DE = swap address (survives the index load)
+        ld      t,1             ; PICK index (clobbers FT)
+        pick    bc              ; BC = base
+        ld      ft,de           ; FT = swap address
+        sub     ft,bc           ; T = swap index
 
         pop     hl/de/bc
         j       (hl)

@@ -121,18 +121,20 @@ f:
 
 ### Callee — `PICK` Variant
 
-The `PICK` strategy reads parameters at fixed indices without discarding them. `PUSH HL` saves the return address, shifting params to index 2+. Params remain on the stack for repeated or conditional access. Cleanup happens in the epilogue.
+The `PICK` strategy reads parameters at fixed indices without discarding them. `PUSH HL` saves the return address, shifting params to index 2+. Each read is `LD T,$nn` (the index) followed by `PICK HL`. Params remain on the stack for repeated or conditional access. Cleanup happens in the epilogue.
 
 ```
 f_pick:
         push    hl             ; dup ret; params shift to index 2+
         push    bc/de          ; callee-saved
 
-        pick    hl,3           ; HL=d (first stack param, deepest)
+        ld      t,3            ; PICK index
+        pick    hl             ; HL=d (first stack param, deepest)
         ld      t,l
         ld      d,t            ; D=d
 
-        pick    hl,2           ; HL=e (second stack param, closer to ret)
+        ld      t,2            ; PICK index
+        pick    hl             ; HL=e (second stack param, closer to ret)
         ld      t,l
         ld      e,t            ; E=e
         ; ... params remain on stack for later access ...
@@ -177,7 +179,8 @@ f_combined:
         push    hl             ; dup ret for PICK
         push    bc/de          ; callee-saved
 
-        pick    hl,3           ; HL=d (accessed multiple times in loop)
+        ld      t,3            ; PICK index
+        pick    hl             ; HL=d (accessed multiple times in loop)
         ld      t,l
         ld      d,t            ; D=d
 
@@ -193,7 +196,7 @@ f_combined:
 
 **Using HL directly as operand**: between `SWAP HL` and `POP HL`, the parameter sits in HL and can be used directly: `ADD T,L`, `ADD FT,HL`, `LD (BC),L`, `AND T,H`, etc. No register save is needed when the parameter is consumed immediately. This is the primary benefit of swap-pop — it eliminates the intermediate save step. When a parameter must be reused across multiple operations, saving to a callee-saved register byte is still necessary.
 
-**Parameter `a` survival**: `T` is clobbered by swap-pop. Save `a` in F (`LD F,T`) before param extraction — F survives because swap/pop only touches HL. For the `PICK` variant, the same applies.
+**Parameter `a` survival**: `T` is clobbered by swap-pop. Save `a` in F (`LD F,T`) before param extraction — F survives because swap/pop only touches HL. For the `PICK` variant, the same applies: the index load is `LD T,$nn`, which writes FT and the FT stack top as well. Both variants therefore leave the parameter in a callee-saved byte (`D`/`E`) rather than in FT.
 
 **Swap-pop mechanics**: `SWAP HL` exchanges HL with `Stack[SP+1]`. The old HL value (ret_addr) is written to `Stack[SP+1]`. `POP HL` advances SP and reloads HL from `Stack[SP]` — which now holds ret_addr. The parameter is available in HL between swap and pop.
 
