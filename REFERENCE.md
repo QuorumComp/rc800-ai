@@ -1112,7 +1112,7 @@ One's complement of F.
 ```
 F <- ~F
 ```
-Opcode: `00011000`
+Opcode: `00110000`
 
 #### NOT T / NOT FT
 One's complement.
@@ -1521,14 +1521,14 @@ Enable external interrupts.
 ```
 IEF <- 1
 ```
-Opcode: `00011010`
+Opcode: `00001000`
 
 #### DI
 Disable external interrupts.
 ```
 IEF <- 0
 ```
-Opcode: `00011011`
+Opcode: `00001001`
 
 #### RETI
 Return from interrupt.
