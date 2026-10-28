@@ -463,6 +463,11 @@ Each 16-bit register pair has its own 256-word (16-bit word) on-chip stack. The 
 - **POP r** — increments stack pointer, loads new top into register
 - **SWAP r** — exchanges register with next stack entry
 - **PICK r** — replaces register with entry at index, where the index is read from `T` whatever the target stack is. Index 0 = the register itself (current top), index 1 = the last pushed value, index 2 = the one before that, and so on. Loading the index with `LD T,n` writes FT — and the FT stack top, which is the same storage.
+- **STOW r** — writes the register into the entry at index, where the index is read from `T` whatever the target stack is. The register and SP are unchanged. `r` is `BC`, `DE` or `HL`; there is no `STOW FT`, because `T` is also the low byte of the value. Loading the index with `LD T,n` writes FT — and the FT stack top, which is the same storage. See [Register-Stack Local Variables](#register-stack-local-variables) for using `PICK`/`STOW` as a local-variable frame.
+
+#### Power-up state
+
+The register stack RAM is **not initialised**. After power-up or reset, the contents of all stack entries — and therefore the values read by `POP`, `PICK` and `SWAP` below the current top — are undefined. The ISA gives no startup guarantee for the register stacks: software must write every value it later reads (`LD r16,...`, `PUSH`, ...). Do not rely on zeros or on any other power-up pattern. The emulator currently zeroes its stack; that is an emulator detail, not part of the architecture.
 
 #### Stack Pointer Direction and Depth
 
@@ -530,6 +535,8 @@ This model applies to all four register stacks (FT, BC, DE, HL). Each register i
 - **`PUSH FT` duplicates, it does not "push the register."** The instruction creates a copy of the current TOS on the stack below. It does not move FT to a new stack position while leaving the old position empty. After push, FT and `Stack[SP+1]` are identical.
 
 - **`PICK` takes its index from `T`, never from the named pair.** `PICK BC` reads `Stack[BC][T]` — `C` is part of the value being read, not the index. Because the index load is `LD T,n`, it writes FT and the FT stack top; park FT around it when a live value has to survive.
+
+- **`STOW` takes its index from `T` too.** `STOW BC` writes BC into `Stack[BC][T]`. It does not move SP and does not change BC, so a read-modify-write can reuse the index already in T after a `PICK BC/DE/HL`. There is no `STOW FT`: T is the low byte of FT, so the value and the index cannot be independent.
 
 #### Using the FT Stack for RPN Calculations
 
@@ -624,6 +631,97 @@ This pattern works because `EXG F,T` swaps the F and T registers, allowing you t
 
 All registers can be pushed/popped simultaneously (`PUSHA`/`POPA`), enabling fast interrupt response.
 
+#### Register-Stack Local Variables
+
+`PICK` and `STOW` make a register stack a frame of locals that can be read and updated in place without moving SP. Use BC or DE for the frame (HL carries the return address; FT has no `STOW`). The register is the scratch slot at depth 0, the locals are at depths 1..N, and the caller's saved pair is at depth N+1.
+
+```
+        ; two 16-bit locals on the DE stack
+        push    de              ; save caller DE
+        ld      de,0            ; clear the duplicate: depth 0 = scratch
+        push    de              ; allocate a zero local
+        push    de              ; allocate a zero local
+        ; depth 0 = scratch, 1 = local 1, 2 = local 2, 3 = caller DE
+
+        ; local 2 = local 2 + 4; T survives PICK and ADD R16,s8
+        ld      t,2
+        pick    de
+        add     de,4
+        stow    de
+
+        ; local 1 = (local 1 << 1) + BC, using FT
+        ld      t,1
+        pick    de
+        exg     ft,de           ; FT = local, DE = FT before the exchange
+        ls      ft,1
+        add     ft,bc
+        exg     ft,de           ; FT restored, T = 1, DE = result
+        stow    de
+```
+
+`PICK` and `STOW` leave T unchanged, and the native `ADD R16,s8` (or the synthesized `ADD R16,i16`) on the frame pair does not write T, so one index load covers a simple update. The double `EXG` restores FT — including T, so the `STOW` targets the same depth — and leaves the result in DE. The exchange does not undo the FT clobber from `LD T,n`: park FT around the index load if its value must survive, and keep the work between the exchanges register-only. The other pair holds the pre-exchange FT, so leave it untouched until the second exchange; a `PUSH`/`POP FT` there also changes the FT stack pointer.
+
+The epilogue discards the scratch slot and the locals with `POP`; each pop loads the next entry, so the last one restores the saved pair. For N locals that is N+1 pops (the scratch slot and the N locals, then the saved pair). For a large frame, use `LCR` and park the return value first.
+
+A complete function, exercised by the firmware's `mathtest` program:
+
+```
+; --
+; -- local_rmw
+; --   Demonstrates register-stack locals: store the first argument in a
+; --   local, update a second local in place, then run an FT-only operation
+; --   on it and write it back.
+; --
+; -- Inputs:
+; --   FT: x
+; --   BC: y
+; --
+; -- Outputs:
+; --   FT: ((x + 4) << 1) + y
+; --
+        SECTION "local_rmw",CODE
+local_rmw:
+        push    de
+        ld      de,0
+        push    de
+        push    de
+        ; depth 0 = scratch, 1 = local 1, 2 = local 2, 3 = caller DE
+
+        ld      de,ft
+        ld      t,2
+        stow    de              ; local 2 = x
+
+        ld      t,2
+        pick    de              ; DE = local 2
+        add     de,4
+        ld      t,1
+        stow    de              ; local 1 = x + 4
+
+        ld      t,1
+        pick    de              ; DE = local 1
+        exg     ft,de
+        ls      ft,1
+        add     ft,bc
+        exg     ft,de           ; FT restored, T = 1, DE = result
+        stow    de              ; local 1 = (x + 4) << 1 + y
+
+        ld      t,1
+        pick    de              ; DE = local 1
+        ld      ft,de           ; return value
+
+        pop     de              ; discard scratch
+        pop     de              ; discard local 1, DE = local 2
+        pop     de              ; discard local 2, DE = caller DE
+        j       (hl)
+```
+
+`local_rmw` preserves BC and DE, uses FT as the caller-saved return register, and leaves HL untouched. Two test vectors exercise it, including the 16-bit wrap of `x + 4`:
+
+| x | y | Expected FT | Result |
+|---|---|---|---|
+| `$FFFF` | `$0000` | `$0006` | `$0006` |
+| `$2222` | `$1111` | `$555D` | `$555D` |
+
 ### Configuration Registers
 
 Accessed via `LCR` instruction using C register as index:
@@ -697,12 +795,16 @@ Common values: `LD F, 0` clears Z (NE/NZ), `LD F, $02` sets Z (EQ/Z), `LD F, $04
 
 Higher modes can interrupt lower modes. A mode cannot interrupt itself. `RETI` returns to the previously active mode.
 
+The illegal-instruction and stack-overflow faults enter NMI mode and **never nest**: while the NMI service runs — including a fault handler — both faults are suppressed. An illegal opcode executed inside the NMI service is not reported and its effect is **undefined**; a push against an empty stack there is not reported either and wraps silently. The NMI service itself must be fault-free.
+
 ### Interrupt Handling
 
 When an interrupt fires:
 1. HL is pushed onto its stack
 2. Return PC is stored in HL
 3. PC is set to the entry address (code at this address may then jump to the handler)
+
+For the fault vectors (`$0018`, `$0020`) the saved address is the **cancelled instruction's own address**: `RETI` re-executes it (cancel-and-restart). The overflowing push is discarded, not executed, so a stack-overflow handler must free stack cells before returning or the retry faults again.
 
 ### Entry Addresses
 
@@ -958,6 +1060,8 @@ Use register-list `PUSH`/`POP` forms in function prologues and epilogues (`PUSH 
 - This is why register-list syntax is preferred: it lets the assembler pick the best encoding or expansion strategy.
 
 **Functions with stack parameters** use a different prologue/epilogue. See [Stack Parameters](#stack-parameters) for details. The key difference: HL is not part of the standard `PUSH BC/DE/HL` save set — it is managed through the HL stack. The swap-pop variant never pushes HL; it preserves ret naturally between `SWAP HL` / `POP HL` pairs and discards the sacrificial slot with a final `POP HL` in the epilogue. The PICK variant pushes HL in the prologue to duplicate ret (shifting params to higher indices for `PICK`), then discards all remaining entries in the epilogue.
+
+**Functions with locals** can keep them on a callee-saved register stack and update them in place with `PICK`/`STOW`; see [Register-Stack Local Variables](#register-stack-local-variables).
 
 ### Register Allocation and Optimization
 
@@ -1425,6 +1529,31 @@ R16 <- Stack[r][T]
 ```
 Opcode: `000111rr`
 
+#### STOW R16
+Write the register into the stack entry at index, where the index is read from `T` whatever the target stack is. Index 0 writes the register's own (topmost) entry with its current value, which is a no-op; index 1 writes the entry below, and so on. The register and the stack pointer are unchanged, and no flags are written. `T` is read but not written. `r` is `BC`, `DE` or `HL`; there is no `STOW FT` (T is also the low byte of the FT value) and no immediate form — load the index into T explicitly.
+```
+Stack[r][T] <- R16
+```
+Opcode: `000110rr` (r=1 BC, r=2 DE, r=3 HL; r=0 illegal)
+
+An index past the current stack depth writes an unused entry; it does not trap. The value becomes visible if the stack later grows or the stack pointer is rewound.
+
+```
+        ld      t,4             ; index
+        stow    bc              ; entry 4 of the BC stack <- BC
+```
+
+Because the index load writes FT and the FT stack top, park FT when it is live:
+
+```
+        push    ft
+        ld      t,e             ; index from E
+        stow    bc
+        pop     ft
+```
+
+`PICK` and `STOW` together form a local-variable frame; see [Register-Stack Local Variables](#register-stack-local-variables).
+
 ---
 
 ### Program Flow
@@ -1444,6 +1573,10 @@ PC <- PC + SignExtend(Code[PC])
 ```
 Opcode: `10011010`
 
+**Long jumps:** the displacement is a signed 8-bit offset (−128 to +127 bytes from the next instruction). When a target is out of range, `JAL label` is the compact unconditional-jump form: it expands to `LD HL, label` / `JAL (HL)`, reaches any address, and has the same code size and execution time as `LD HL, label` / `J (HL)`. The catch is that `JAL` writes HL again with the return address, so HL is clobbered. Use it only when HL is dead across the jump; otherwise write `LD HL, label` / `J (HL)` explicitly so the side effect is visible in the source.
+
+`JAL` can also be made conditional with the usual `/CC` suffix — `JAL/EQ label`, `JAL/NE label`, and so on. That is a conditional absolute jump with no trampoline: the condition is tested before the synthesized load and jump, so HL is only clobbered when the branch is taken. The flags survive because neither `LD HL` nor `JAL (HL)` writes F.
+
 #### J (R16)
 Indirect jump through 16-bit register.
 ```
@@ -1462,6 +1595,7 @@ Opcode: `001110rr`
 #### JAL i16
 Jump to absolute address, store return in HL.
 - **Synthesized** by assembler: `LD HL, i16; JAL (HL)`
+- Also used as the long-jump form for out-of-range `J` targets; see [J s8](#j-s8).
 
 #### J/CC s8
 Conditional relative jump based on F register flags. This is a **native** instruction (not synthesized) — it is the fundamental branching primitive. Other conditional constructs (e.g., `INST/CC`) are synthesized by expanding to `J/!CC` to skip the target instruction.
@@ -1761,6 +1895,9 @@ For the 16-bit/8-bit register mapping and clobber-checking rules, see [Register 
 | `PICK BC` | T ; B/C - BC | B/C | BC ; BC (stack) |
 | `PICK DE` | T ; D/E - DE | D/E | DE ; DE (stack) |
 | `PICK HL` | T ; H/L - HL | H/L | HL ; HL (stack) |
+| `STOW BC` | T ; B/C - BC | — | — ; BC (stack) |
+| `STOW DE` | T ; D/E - DE | — | — ; DE (stack) |
+| `STOW HL` | T ; H/L - HL | — | — ; HL (stack) |
 | `NOP` | — - — | — | — |
 | `J S8` | — - — | — | — ; PC |
 | `J (FT)` | F/T - FT | — | — ; PC |
@@ -1798,7 +1935,7 @@ For the 16-bit/8-bit register mapping and clobber-checking rules, see [Register 
 
 - **Reads/Writes/Clobbers notation**: see [How to read the Native Instruction Table](#how-to-read-the-native-instruction-table) for column definitions and a worked `CMP B,I8` example.
 - **Stack operations in the table:** For `PUSH R16`, the **Reads** column lists the two bytes of the 16-bit register that is pushed as a single word. The `; R16 (stack)` side effect in the **Clobbers** column means the value is duplicated onto that register's independent 16-bit stack. For `POP R16`, the **Writes** column lists the two bytes that are updated when the popped 16-bit word is loaded back into the register, and the **Clobbers** column lists the affected parent pair. `PUSHA`/`POPA` do the same for all four pairs at once.
-- **Stack operation semantics** (`PUSH`/`POP`/`SWAP`/`PICK`): see [Register Stacks](#register-stacks) and the [PUSH](#push-r16)/[POP](#pop-r16)/[SWAP](#swap-r16)/[PICK](#pick-r16) instruction subsections.
+- **Stack operation semantics** (`PUSH`/`POP`/`SWAP`/`PICK`/`STOW`): see [Register Stacks](#register-stacks) and the [PUSH](#push-r16)/[POP](#pop-r16)/[SWAP](#swap-r16)/[PICK](#pick-r16)/[STOW](#stow-r16) instruction subsections.
 - **J/CC condition codes**: `LE`, `GT`, `LT`, `GE` (signed), `LEU`, `GTU`, `LTU`/`CS`, `GEU`/`CC` (unsigned), `EQ`/`Z` (equal), `NE`/`NZ` (not equal). All read F to evaluate the condition.
 - **LIO/LCO**: Assert IO or CODE signal respectively during the memory access.
 - **LCO** has no store form (only load).
@@ -2129,7 +2266,7 @@ The following cannot be fully enumerated as they apply to any instruction or any
 | `POP R16/R16` | Individual `POP` per register | Any subset of FT, BC, DE, HL (15 combos) |
 | `SWAP R16/R16` | Individual `SWAP` per register | Any subset of FT, BC, DE, HL (15 combos) |
 
-**Conditional execution:** Any instruction can be made conditional by appending `/CC`. The assembler emits a native `J/!CC` (inverted condition) that skips the instruction if the condition is not met. For example, `LD/EQ T, 1` becomes `J/NE, @+2` / `LD T, 1`. The special form `J/CC (R16)` expands to `J/!CC, @+2` / `J (R16)`.
+**Conditional execution:** Any instruction can be made conditional by appending `/CC`. The assembler emits a native `J/!CC` (inverted condition) that skips the instruction if the condition is not met. For example, `LD/EQ T, 1` becomes `J/NE, @+2` / `LD T, 1`. The special form `J/CC (R16)` expands to `J/!CC, @+2` / `J (R16)`. For a conditional absolute long jump, `JAL/CC label` needs no preloaded register; it clobbers HL only when taken.
 
 ### Synthesized Instruction Notes
 
@@ -2320,7 +2457,7 @@ See [`examples/exg_techniques.md`](examples/exg_techniques.md) for fully traced 
 
 ### Four Independent Stacks as Scratch Space
 
-The FT, BC, DE, and HL stacks are fully independent 16-bit word stacks. While BC, DE, and HL are primarily used for callee-saved register storage, each stack can serve as independent scratch space. `PUSH BC` does not affect the DE or HL stacks, so you can use one stack as a temporary buffer, another for parameter passing, and still another for loop counters — all without interfering. `PICK R16` gives O(1) indexed access into any stack (the index is read from `T`), and `LCR` can read or write the stack pointer directly for bulk rewind or depth queries. When data-segment memory is scarce, the register stacks are a natural place to park intermediate values that do not need to survive a function return.
+The FT, BC, DE, and HL stacks are fully independent 16-bit word stacks. While BC, DE, and HL are primarily used for callee-saved register storage, each stack can serve as independent scratch space. `PUSH BC` does not affect the DE or HL stacks, so you can use one stack as a temporary buffer, another for parameter passing, and still another for loop counters — all without interfering. `PICK R16` gives O(1) indexed access into any stack and `STOW R16` gives O(1) indexed writes into the BC/DE/HL stacks (the index is read from `T`), and `LCR` can read or write the stack pointer directly for bulk rewind or depth queries. When data-segment memory is scarce, the register stacks are a natural place to park intermediate values that do not need to survive a function return.
 
 ### LD R8,(FT) for Pointer-Safe Loads
 
