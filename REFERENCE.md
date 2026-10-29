@@ -473,6 +473,36 @@ The register stack RAM is **not initialised**. After power-up or reset, the cont
 
 The stack grows **downward**: SP starts at `$FF` (empty) and each `PUSH` decrements it toward `$00`. So `$FF` means 0 entries, `$FE` means 1 entry, and `$00` means 255 entries. The raw SP value is inverted relative to depth; number of entries = `$FF - SP`, computable in one instruction via `NOT T` after `LCR T,(C)`. The `RC8_SP_*` configuration registers (see [Configuration Registers](#configuration-registers)) expose these SP values for read and write via `LCR`.
 
+#### Overflow and Underflow
+
+The two ends of a register stack behave **asymmetrically**: overflow is a
+fault, underflow is silent.
+
+- **Overflow (push side).** `PUSH`/`PUSHA` with the pair's SP at `$00`
+  (255 entries — the stack is full) raises the stack-overflow fault
+  (`$0020`, NMI mode, cancel-and-restart): the push is discarded, SP and
+  the register are unchanged. See [Interrupt Handling](#interrupt-handling).
+- **Underflow (pop side) never faults.** No instruction checks the empty
+  end of the stack:
+  - `POP`/`POPA` with SP at `$FF` (empty): the pointer increments and
+    **wraps to `$00`**, and the register loads entry `$00` — the deepest
+    cell, undefined after power-up.
+  - `SWAP` at SP `$FF` exchanges the register with entry `$00`. At SP
+    `$00`, `PUSH` faults but `SWAP` does not — it exchanges entries `$00`
+    and `$01`.
+  - `PICK`/`STOW` compute `SP + T` modulo 256: an index that runs off
+    either end wraps silently around the ring of cells.
+  - An `LCR` SP write takes any value; no bound is checked.
+
+The trap this creates: one stray extra `POP` leaves SP at `$00`, where the
+stack *looks* empty (depth `$FF − SP` = 0) but the next `PUSH` faults as
+an overflow — reported at the push, far from the pop that caused it. A
+stack-overflow fault on a pair whose depth should be nowhere near full is
+almost always a pop-accounting bug, not a depth problem. Inside the NMI
+service, where the overflow fault is suppressed, even the push side wraps
+silently (`$00` → `$FF`), so handlers must keep their stacks balanced by
+construction.
+
 #### Writing the SP Clobbers the Register
 
 Because the register is a live view into `Stack[SP]`, writing the SP via `LCR (C),T` changes the register content to reflect `Stack[new_SP]` — the register does not retain its previous value. Treat any SP write as clobbering the register pair. Load a known value into the register after the SP write if its content is needed.
@@ -795,7 +825,7 @@ Common values: `LD F, 0` clears Z (NE/NZ), `LD F, $02` sets Z (EQ/Z), `LD F, $04
 
 Higher modes can interrupt lower modes. A mode cannot interrupt itself. `RETI` returns to the previously active mode.
 
-The illegal-instruction and stack-overflow faults enter NMI mode and **never nest**: while the NMI service runs — including a fault handler — both faults are suppressed. An illegal opcode executed inside the NMI service is not reported and its effect is **undefined**; a push against an empty stack there is not reported either and wraps silently. The NMI service itself must be fault-free.
+The illegal-instruction and stack-overflow faults enter NMI mode and **never nest**: while the NMI service runs — including a fault handler — both faults are suppressed. An illegal opcode executed inside the NMI service is not reported and its effect is **undefined**; a push against a full stack there is not reported either and wraps the pointer silently (`$00` → `$FF`). The NMI service itself must be fault-free. Stack **underflow is never reported anywhere**: pops, swaps, picks and stows have no bounds check at any privilege level (see [Overflow and Underflow](#overflow-and-underflow)).
 
 ### Interrupt Handling
 
@@ -2609,7 +2639,7 @@ When a recursive routine needs more than one parameter preserved across a recurs
 
 #### Stack Discipline in Recursive Functions
 
-Every `PUSH FT` must have a matching `POP FT` before the function returns. A missed pop leaks one stack entry per call frame, which accumulates and eventually causes stack overflow. A practical rule: count pushes and pops in the recursive path — they must match.
+Every `PUSH FT` must have a matching `POP FT` before the function returns. A missed pop leaks one stack entry per call frame, which accumulates and eventually causes stack overflow. The reverse error is sneakier: an extra pop underflows **silently** and turns the next push into an overflow fault far from the bug (see [Overflow and Underflow](#overflow-and-underflow)). A practical rule: count pushes and pops in the recursive path — they must match.
 
 #### Check Base Cases Before Pushing Callee-Saved Registers
 
