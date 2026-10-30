@@ -29,16 +29,17 @@ Five parameters: three fit in registers (T, BC, DE), two spill to the HL stack (
         ; call f(a, b, c, d, e)
         ; registers: T=a, BC=b, DE=c  |  stack: d(s8), e(u8)
 
-        ; Push stack params in declaration order
-        ld      t,d_val
-        ext                    ; sign-extend d (s8)
-        ld      hl,ft
-        push    hl             ; d on HL stack
-
+        ; Push stack params in reverse declaration order
+        ; (first stack param ends up nearest the sacrificial slot)
         ld      t,e_val
         ld      f,0            ; zero-extend e (u8)
         ld      hl,ft
-        push    hl             ; e on HL stack
+        push    hl             ; e on HL stack (last param pushed first)
+
+        ld      t,d_val
+        ext                    ; sign-extend d (s8)
+        ld      hl,ft
+        push    hl             ; d on HL stack (first param pushed last)
 
         push    hl             ; sacrificial slot for jal
 
@@ -56,8 +57,8 @@ Five parameters: three fit in registers (T, BC, DE), two spill to the HL stack (
 
 ```
   HL (index 0, SP)   = return address
-  index 1             = e  (last stack param pushed, closest to ret)
-  index 2             = d  (first stack param pushed)
+  index 1             = d  (first stack param, pushed last, closest to ret)
+  index 2             = e  (last stack param, pushed first)
 ```
 
 ### Callee — Swap-pop Variant
@@ -72,7 +73,7 @@ The swap-pop strategy extracts each parameter and discards it, incrementally cle
 ; --
 ; -- Inputs:
 ; --   T: a, BC: b, DE: c
-; --   HL stack[1]: e (u8, low byte), stack[2]: d (s8, low byte)
+; --   HL stack[1]: d (s8, low byte), stack[2]: e (u8, low byte)
 ; --
 ; -- Outputs:
 ; --   FT: (a + low(b) + low(c)) * (d + e) (u16)
@@ -84,12 +85,12 @@ f:
 
         ; Compute (d + e) via swap-pop — use L directly as operand
         ld      t,0            ; T=0, accumulator
-        swap    hl             ; HL=e (closest to ret)
-        add     t,l            ; T += e (L used directly, no register save)
-        pop     hl             ; HL=ret restored, e discarded
-        swap    hl             ; HL=d
-        add     t,l            ; T += d
+        swap    hl             ; HL=d (first param, closest to ret)
+        add     t,l            ; T += d (L used directly, no register save)
         pop     hl             ; HL=ret restored, d discarded
+        swap    hl             ; HL=e
+        add     t,l            ; T += e
+        pop     hl             ; HL=ret restored, e discarded
         ld      d,t            ; D=d+e (save in callee-saved for multiply)
 
         ; Compute (a + b + c) in FT
@@ -128,13 +129,13 @@ f_pick:
         push    hl             ; dup ret; params shift to index 2+
         push    bc/de          ; callee-saved
 
-        ld      t,3            ; PICK index
-        pick    hl             ; HL=d (first stack param, deepest)
+        ld      t,2            ; PICK index
+        pick    hl             ; HL=d (first stack param, closest to ret)
         ld      t,l
         ld      d,t            ; D=d
 
-        ld      t,2            ; PICK index
-        pick    hl             ; HL=e (second stack param, closer to ret)
+        ld      t,3            ; PICK index
+        pick    hl             ; HL=e (second stack param, deeper)
         ld      t,l
         ld      e,t            ; E=e
         ; ... params remain on stack for later access ...
@@ -147,8 +148,8 @@ f_pick:
         pop     de/bc          ; restore callee-saved
         pop     hl             ; discard ret dup
         pop     hl             ; discard ret
-        pop     hl             ; discard e
         pop     hl             ; discard d
+        pop     hl             ; discard e
         ld      hl,ft          ; HL=ret
         pop     ft             ; FT=result
         j       (hl)
@@ -163,7 +164,7 @@ For many stack parameters, bulk cleanup via `LCR` is more compact than individua
         ld      de,ft          ; DE=ret (save; LCR clobbers FT)
         ld      c,RC8_SP_HL    ; C = SP_HL index
         lcr     t,(c)          ; T = SP_HL
-        add     t,4            ; advance past ret dup, ret, e, d
+        add     t,4            ; advance past ret dup, ret, d, e
         lcr     (c),t          ; SP_HL = new value
         ld      hl,de          ; HL=ret (restore from DE)
         pop     ft             ; FT=result
@@ -179,12 +180,14 @@ f_combined:
         push    hl             ; dup ret for PICK
         push    bc/de          ; callee-saved
 
-        ld      t,3            ; PICK index
+        ld      t,2            ; PICK index
         pick    hl             ; HL=d (accessed multiple times in loop)
         ld      t,l
         ld      d,t            ; D=d
 
         pop     hl             ; discard ret dup, back to swap-pop mode
+        swap    hl             ; HL=d (already saved in D)
+        pop     hl             ; discard d, HL=ret restored
         swap    hl             ; HL=e
         ld      t,l
         ld      e,t            ; E=e
@@ -212,7 +215,7 @@ f_combined:
 
 For 8-bit params where only the low byte is needed (e.g., array indexing), `ADD T,L` is sufficient.
 
-**Stack balance**: caller pushes 3 entries (d, e, sacrificial). Callee pops 3 total for swap-pop (2 swap-pops + 1 final `POP HL`). PICK variant pushes 1 extra (ret dup) and pops 4 in the epilogue. LCR advances by 4. Net: zero. All four register stacks are balanced on return.
+**Stack balance**: caller pushes 3 entries (e, d, sacrificial). Callee pops 3 total for swap-pop (2 swap-pops + 1 final `POP HL`). PICK variant pushes 1 extra (ret dup) and pops 4 in the epilogue. LCR advances by 4. Net: zero. All four register stacks are balanced on return.
 
 ### Worked Trace (swap-pop variant)
 
@@ -220,8 +223,8 @@ Assume `a=1, b=$0002, c=$0003, d=-1 (s8, $FF), e=4`. Expected: `(1+low($0002)+lo
 
 **Caller:**
 ```
-   push d:  HL=$FFFF (sign-extended), SP_HL decremented
-  push e:  HL=$0004 (zero-extended), SP_HL decremented
+   push e:  HL=$0004 (zero-extended), SP_HL decremented
+  push d:  HL=$FFFF (sign-extended), SP_HL decremented
   push sacrificial: SP_HL decremented
   jal f:   HL=ret_addr (overwrites sacrificial)
 ```
@@ -232,18 +235,18 @@ Assume `a=1, b=$0002, c=$0003, d=-1 (s8, $FF), e=4`. Expected: `(1+low($0002)+lo
   push bc/de:  BC=$0002, DE=$0003 saved on stacks
 ```
 
-**Swap-pop e (L used directly):**
+**Swap-pop d (L used directly):**
 ```
   ld t,0:   T=0 (accumulator for d+e)
-  swap hl:  HL=$0004 (e), Stack[SP+1]=ret
-  add t,l:  T=0+4=4 (L used directly as operand)
+  swap hl:  HL=$FFFF (d, sign-extended), Stack[SP+1]=ret
+  add t,l:  T=0+$FF=$FF (L used directly as operand)
   pop hl:   HL=ret, SP_HL incremented
 ```
 
-**Swap-pop d (L used directly):**
+**Swap-pop e (L used directly):**
 ```
-  swap hl:  HL=$FFFF (d, sign-extended), Stack[SP+1]=ret
-  add t,l:  T=4+$FF=$03 (low byte; signed wrap: -1+4=3)
+  swap hl:  HL=$0004 (e), Stack[SP+1]=ret
+  add t,l:  T=$FF+4=$03 (low byte; signed wrap: -1+4=3)
   pop hl:   HL=ret, SP_HL incremented
   ld d,t:   D=$03 (save d+e for multiply)
 ```
@@ -260,7 +263,7 @@ Assume `a=1, b=$0002, c=$0003, d=-1 (s8, $FF), e=4`. Expected: `(1+low($0002)+lo
          FT = 18 ($0012)
 ```
 
-**Note on signed params**: `ADD T,L` reads only the low byte. For d=-1 ($FF), L=$FF, so T=4+$FF=$03 — the low-byte wrap happens to produce the correct signed result (-1+4=3). This works whenever the signed sum fits in 8 bits. When the result may exceed 8 bits, use `ADD FT,HL` to incorporate the full sign-extended value.
+**Note on signed params**: `ADD T,L` reads only the low byte. For d=-1 ($FF), L=$FF, so T=0+$FF=$FF; adding e=4 next gives $FF+4=$03 — the low-byte wrap happens to produce the correct signed result (-1+4=3). This works whenever the signed sum fits in 8 bits. When the result may exceed 8 bits, use `ADD FT,HL` to incorporate the full sign-extended value.
 
 **Epilogue:**
 ```
