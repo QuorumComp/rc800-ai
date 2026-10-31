@@ -859,7 +859,7 @@ Parameters are assigned left to right. The first parameters use registers from t
 
 - **8-bit param** — occupies one register from the sequence, or one 16-bit word on the HL stack (value in low byte, high byte sign- or zero-extended per declared type)
 - **16-bit param** — occupies FT, BC, or DE in order, or one 16-bit word on the HL stack
-- **Multi-word (≥32-bit)** — passed on a register stack; MSW in R, next word in R'
+- **Multi-word (≥32-bit)** — passed on a register stack as a word ladder: MSW in `R`, next word at `R'`, LSW deepest at `R^(W-1)` for a `W`-word value. The caller pushes the words LSW-first and leaves the MSW in the register; the callee consumes the ladder by popping `W-1` cells (one less word than the value uses). The standard route is the FT stack; see [32-Bit Value Convention](#32-bit-value-convention-ftft) and [StandardCallingConvention.md](StandardCallingConvention.md).
 
 Mixed 8-bit and 16-bit parameters are allowed. An 8-bit parameter may not use a register that is part of an already-claimed 16-bit pair. Organize parameter order to avoid wasting registers or leaving "holes" in the assignment sequence.
 
@@ -1062,7 +1062,7 @@ f:
 
 ### Return Values
 
-- Returned in FT (or on FT stack for multi-word).
+- Returned in FT (or on FT stack for multi-word: the same word ladder, MSW left in the register, remaining words pushed LSW-first; the caller pops W-1 cells).
 - **8-bit returns**: When returning an 8-bit value in T, there is no need to clear F. The caller reads only T for an 8-bit result, so the contents of F are irrelevant. Only clear F when the return value is genuinely 16-bit and the high byte must be zero.
 
 ### Preserved Registers
